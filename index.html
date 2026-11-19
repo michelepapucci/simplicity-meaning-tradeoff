@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Same Metric, Opposite Verdicts</title>
+<meta name="description" content="Interactive draft: simplification benchmarks disagree on how meaning and simplicity relate, which confounds metric evaluation. Fingerprints, length, a factorial contrast set and LLM judges.">
+<link rel="stylesheet" href="style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.16/dist/plot.umd.min.js"></script>
+<script defer src="data.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<div class="topbar"><div class="topbar-inner">
+  <span class="brand">Same Metric, Opposite Verdicts</span>
+  <nav aria-label="Sections">
+    <a href="#intro">Introduction</a><a href="#confound">The confound</a><a href="#fingerprints">Fingerprints</a>
+    <a href="#length">Length</a><a href="#contrast">Contrast set</a><a href="#judges">LLM judges</a>
+    <a href="#discussion">Discussion</a><a href="#acl">Road to ACL</a><a href="#appendix">Appendix</a>
+  </nav>
+  <button class="theme-btn" id="theme-btn" type="button" aria-label="Switch colour theme">Theme</button>
+</div></div>
+
+<main>
+<header class="paper">
+  <h1>Same Metric, Opposite Verdicts: How Simplification Benchmarks Confound the Evaluation of Metrics</h1>
+  <div class="byline">Working title · interactive draft, not peer reviewed · results as of <span data-bind="generated"></span> · target: ARR January 2027</div>
+</header>
+
+<div class="prose">
+<div class="banner" role="note">
+  <b>How to read this draft.</b> Experiment 1 (nine public benchmarks) is final and pre-registered.
+  The contrast set is a <b>pilot rated by one annotator</b>: exploratory, and it will change when the three-annotator full set is in.
+  LLM judges: one of two judges is complete. Every figure is computed from the project's result files;
+  hover or tap marks for values, and open "Data" under a figure for the table.
+  <span class="badge plan">Planned</span> boxes say what is still to be done; <span class="badge info">Proposal</span> boxes are suggestions not yet adopted.
+</div>
+<div class="status-row" id="status-row"></div>
+
+<h2 id="abstract">Abstract</h2>
+<p class="lead">Text-simplification metrics are validated by correlating them with human ratings of meaning preservation and simplicity.
+We show that the outcome of this validation depends on the benchmark. Across nine public benchmarks the human correlation between
+meaning and simplicity ranges from −0.37 to +0.74 (I² = 0.99), so a metric that only tracks meaning appears to reward simplicity on
+one benchmark and to penalise it on another. We describe each metric by its <em>fingerprint</em>, the weights it puts on meaning and on
+simplicity once their correlation is removed. Fingerprints are stable for most metrics and rank metrics far more consistently across
+benchmarks than raw correlations (Kendall τ gain 0.28). On natural data, simplicity is also entangled with output length, to a degree
+that differs from benchmark to benchmark. A factorial contrast set, in which meaning, simplicity and length vary independently, pulls the
+two apart: in a pilot, readability formulas and learned simplicity metrics track simplicity more cleanly than on any natural benchmark,
+length ratios carry none of the designed simplicity, and only two metrics track meaning at all. An open LLM judge (Qwen3.8-27B) is the best meaning measure on eight of nine benchmarks and on the
+contrast set, is on par with the best metric for simplicity, and rewards shorter outputs more than human raters do.</p>
+
+<h2 id="intro"><span class="num">1</span>Introduction</h2>
+<p>A simplification metric is usually trusted because its scores correlate with human ratings. Most benchmarks rate two things,
+<em>meaning preservation</em> (M) and <em>simplicity</em> (S), and a metric is said to "measure simplicity" when it correlates with S.
+That verdict is not a property of the metric alone. BERTScore correlates with simplicity at r = +0.53 on Simplicity-DA and at
+r = −0.31 on Structural Simplicity. The metric did not change; the benchmark did.</p>
+<p>The reason is that benchmarks differ in how their own human ratings of meaning and simplicity relate. On some, annotators who see a
+faithful output also tend to find it simple; on others, simpler outputs are the ones that lost content. Call this correlation ρ = r(M, S).
+A metric that tracks only meaning inherits a simplicity correlation of about ρ · r(X, M): positive where ρ is positive and negative where
+it is negative. Raw correlations therefore mix what a metric measures with what the benchmark's annotators did. On top of this,
+simplicity on natural data is tangled with length, because simplifying usually means shortening.</p>
+<p>This paper makes four contributions:</p>
+<ol class="contrib">
+  <li><b>The confound, measured.</b> The first meta-analysis of ρ across simplification benchmarks (nine, pre-registered): it varies from
+  −0.37 to +0.74, and that variation explains where benchmarks disagree about metrics (§2).</li>
+  <li><b>Fingerprints.</b> A closed-form description of a metric by its weights on M and S given ρ, with a feasibility bound, a reliability
+  correction and a transfer test. Fingerprints are stable for 82% of metrics and make metric rankings agree across benchmarks (§3).</li>
+  <li><b>Length, separated.</b> Partial correlations and matched-length pairs on natural data (§4), and a factorial contrast set in which
+  meaning, simplicity and length are crossed by design and rated by humans (§5).</li>
+  <li><b>LLM judges.</b> How LLM judges compare with every metric on the benchmarks and on the contrast set, and whether they reward
+  shorter outputs beyond what humans do (§6).</li>
+</ol>
+
+<h2 id="confound"><span class="num">2</span>Benchmarks disagree about how meaning and simplicity relate</h2>
+<p>We use every public English benchmark that rates meaning and simplicity separately: nine studies, from 84 to 6,163 rated outputs,
+built between 2016 and 2024 with different systems, scales and rater pools (Appendix A). For each, ρ is the item-level correlation between
+the mean human meaning and simplicity ratings.</p>
+
+<figure class="fig" id="f1">
+  <div class="fig-title">Figure 1. The human meaning–simplicity correlation differs by benchmark</div>
+  <div class="fig-sub">ρ = r(M, S) per benchmark with 95% CI; dot area = random-effects weight; bottom row = pooled estimate.</div>
+  <div class="chart" id="c-f1"></div>
+  <figcaption id="cap-f1"></figcaption>
+</figure>
+
+<p class="finding">Four benchmarks have ρ ≥ 0.32, four are near zero, and one is clearly negative; the heterogeneity is extreme
+(Q = 971 on 8 df, I² = 0.99).</p>
+<p>What this does to a metric is easiest to see by putting two benchmarks side by side. Pick any two below. With Simplicity-DA (ρ = 0.74)
+and Structural Simplicity (ρ = −0.37), the similarity metrics (BLEU, BERTScore, SARI) swap the sign of their simplicity correlation, while
+their fingerprint weight on simplicity stays near zero on both.</p>
+
+<figure class="fig" id="f2">
+  <div class="fig-title">Figure 2. Raw correlations flip; fingerprints do not</div>
+  <div class="fig-sub">Per metric: raw correlation with human simplicity (left) and fingerprint weight β<sub>S</sub> (right) on two benchmarks. Hollow = metric not aligned with the human ratings there (R &lt; 0.20).</div>
+  <div class="controls" id="ctl-f2"></div>
+  <div class="legend" id="leg-f2"></div>
+  <div class="chart" id="c-f2"></div>
+  <figcaption>A metric that tracks only meaning (β<sub>S</sub> ≈ 0) still shows a raw simplicity correlation of about ρ · r(X, M), so its raw value follows the benchmark. Pairs with very different ρ show the largest flips.</figcaption>
+</figure>
+
+<p>The same arithmetic also limits what any metric can achieve on a benchmark. The joint correlation matrix of a metric X and the two human
+ratings must be positive semi-definite, which confines the pair (r(X, M), r(X, S)) to an ellipse whose tilt is set by ρ alone. Where ρ is
+negative, no metric can correlate strongly with both meaning and simplicity: the trade-off is built into the benchmark, not into the metric.</p>
+
+<figure class="fig" id="f3">
+  <div class="fig-title">Figure 3. What a benchmark allows</div>
+  <div class="fig-sub">Feasible region of (r(X, M), r(X, S)) given the benchmark's ρ, with every metric. The straight line marks metrics that track meaning only (r<sub>S</sub> = ρ · r<sub>M</sub>).</div>
+  <div class="controls" id="ctl-f3"></div>
+  <div class="legend" id="leg-f3"></div>
+  <div class="chart" id="c-f3"></div>
+  <figcaption>"Disattenuated" corrects each correlation for rating noise (split-half reliability, on the benchmarks that release per-rater scores).</figcaption>
+</figure>
+
+<h2 id="fingerprints"><span class="num">3</span>Fingerprints: describing a metric once ρ is removed</h2>
+<p>For a metric X on one benchmark, let c = (r<sub>M</sub>, r<sub>S</sub>) be its correlations with the human ratings and Σ the 2 × 2 human
+correlation matrix with off-diagonal ρ. The fingerprint is the vector of standardised regression weights of X on M and S:</p>
+<div class="eq">β = Σ<sup>−1</sup> c, &nbsp; i.e. &nbsp; β<sub>M</sub> = (r<sub>M</sub> − ρ r<sub>S</sub>) / (1 − ρ²), &nbsp; β<sub>S</sub> = (r<sub>S</sub> − ρ r<sub>M</sub>) / (1 − ρ²), &nbsp; R² = βᵀc.</div>
+<p>R, the multiple correlation, says how much of the human signal the metric captures; we interpret a fingerprint only where R ≥ 0.20.
+Run backwards, a fingerprint predicts a metric's raw correlations on a new benchmark from that benchmark's ρ: ĉ = Σ<sub>new</sub> β.</p>
+
+<figure class="fig" id="f4">
+  <div class="fig-title">Figure 4. Fingerprints are stable across benchmarks for most metrics</div>
+  <div class="fig-sub">Mean fingerprint (β<sub>M</sub>, β<sub>S</sub>) per metric over the benchmarks where it is aligned; whiskers = ±1 SD across benchmarks. Pick a metric to see its benchmark-level fingerprints.</div>
+  <div class="controls" id="ctl-f4"></div>
+  <div class="legend" id="leg-f4"></div>
+  <div class="chart" id="c-f4"></div>
+  <figcaption id="cap-f4"></figcaption>
+</figure>
+
+<p class="finding">For 14 of 17 aligned metrics (82%) the SD of β<sub>S</sub> across benchmarks is at most 0.15 (pre-registered bar: 70%);
+the median SD falls from 0.225 for the raw correlation to 0.138 for the fingerprint.</p>
+<p>The three exceptions (SARI, iBLEU and BERTScore against the source) are all similarity metrics; among reference-free metrics, 11 of 12
+fingerprints are stable. Stability matters in practice because it makes metric <em>rankings</em> agree across benchmarks.</p>
+
+<figure class="fig" id="f5">
+  <div class="fig-title">Figure 5. Fingerprints rank metrics consistently where raw correlations do not</div>
+  <div class="fig-sub">Every pair of benchmarks: gain in Kendall τ between the two metric rankings when metrics are ranked by β<sub>S</sub> instead of raw r<sub>S</sub>, against the difference in ρ.</div>
+  <div class="chart" id="c-f5"></div>
+  <figcaption id="cap-f5"></figcaption>
+</figure>
+
+<p>The stronger, pre-registered claim, that fingerprints predict a metric's correlations on an unseen benchmark 40% better than the naive
+baseline (the mean raw correlations of the other benchmarks), does not hold. The leave-one-benchmark-out error falls by 24% (0.153 vs 0.200),
+and the fingerprint wins for 19 of 19 metrics. The gain is concentrated where it should be: on benchmarks whose ρ is far from the others'.</p>
+
+<figure class="fig" id="f6">
+  <div class="fig-title">Figure 6. Transfer helps where benchmarks differ</div>
+  <div class="fig-sub">Leave-one-benchmark-out: reduction in prediction error by the fingerprint over the naive baseline, against how far the held-out benchmark's ρ is from the mean of the others.</div>
+  <div class="chart" id="c-f6"></div>
+  <figcaption>Spearman ρ between gain and distance = 0.90 (exploratory, added after seeing the results). With four of nine benchmarks near ρ = 0, the pre-registered 40% target was out of reach by construction.</figcaption>
+</figure>
+
+<h2 id="length"><span class="num">4</span>Length is part of the confound</h2>
+<p>Simplifying usually shortens. If human simplicity ratings follow length, a metric can look like a simplicity metric by rewarding brevity.
+How strongly simplicity and length are linked is itself a benchmark property, ranging from |r| = 0.05 on ASSET to 0.71 on Structural Simplicity.
+We take length as the compression ratio (output tokens / source tokens) and ask, for every metric, how much of its simplicity correlation
+survives once length is held fixed.</p>
+
+<figure class="fig" id="f7">
+  <div class="fig-title">Figure 7. Only length-based proxies are pure length</div>
+  <div class="fig-sub">(a) r(S, L) per benchmark. (b) |r(X, S)| raw → with length partialled out, averaged over benchmarks where |r(S, L)| ≥ 0.30. (c) Accuracy at ordering two outputs of the same source that have equal length but clearly different human simplicity.</div>
+  <div class="legend" id="leg-f7"></div>
+  <div class="chart" id="c-f7a"></div>
+  <div class="two-col"><div class="chart" id="c-f7b"></div><div class="chart" id="c-f7c"></div></div>
+  <figcaption>(c): grey band = chance (0.50 ± 0.07); vertical line = the pre-registered 0.60 bar for at least one metric.</figcaption>
+</figure>
+
+<p class="finding">Compression ratio and sentence-length gain lose their whole simplicity signal once length is controlled and sit at chance on
+equal-length pairs. FKGL, FRE and ΔSLE keep 70–80% of theirs, and SIMPLE keeps 93–96%.</p>
+<p>The pre-registered expectation was stronger: that proxies as a group lose ≥ 60% (they lose 33%) and fall to chance on matched pairs
+(the readability formulas reach 0.57–0.60). Readability formulas therefore carry simplicity signal beyond length, and length contaminates
+learned metrics far less than expected. What natural data cannot do is settle the question for the benchmark where it matters most: only on
+Structural Simplicity are simplicity and length strongly coupled (|r| = 0.71), and there a three-way fingerprint on (M, S, L) is precise, so
+the inseparability hypothesis H4 fails. Separating simplicity from length cleanly requires data in which they are uncorrelated by design.</p>
+
+<h2 id="contrast"><span class="num">5</span>A factorial contrast set</h2>
+<p>We build outputs that land in the cells of a 2 × 3 × 3 design: meaning <em>kept</em> or <em>lost</em> × <em>simpler</em>, <em>same</em> or
+<em>harder</em> than the source × <em>shorter</em>, <em>same length</em> or <em>longer</em>. With equal cell counts the three factors are
+uncorrelated, so a metric's weights on meaning, simplicity and length are separately identifiable. Sources are hard-to-read sentences
+(20–45 tokens, FKGL ≥ 10) from 2025–26 Wikipedia, Wikinews, MedlinePlus and gov.uk, excluding near-duplicates of benchmark and
+metric-training data. Two open models (Gemma 3 27B, Mistral Small 3.2 24B) generate; a human validator decides whether each output realises
+its cell; three trained annotators rate meaning (1–5), simplicity relative to the source (−2…+2) and fluency (1–5). No metric or LLM
+ever selects items, since the set is meant to test exactly those scorers.</p>
+
+<div class="callout expl"><div class="kicker">Exploratory: pilot, one annotator</div>
+The pilot has 20 sources and 199 rated items (194 designed items plus 5 attention checks), all rated by one trained annotator. Agreement
+(Krippendorff α) needs a second and third annotator, and single-rater means are noisier than the three-rater means the full set will use.
+Read the numbers below as a first look at the design, not as results.</div>
+
+<h3><span class="num">5.1</span>Did the design survive?</h3>
+<p>Before annotation, the designed factors and the measured length are uncorrelated on the valid items (all |r| ≤ 0.04). After annotation,
+the human ratings mostly follow the design: the achieved correlation between human meaning and human simplicity is 0.04, and between meaning
+and length −0.12. Simplicity and length are still weakly linked in the ratings (r = −0.25 against a 0.20 target): longer outputs are rated a
+little harder even when the design keeps their difficulty fixed.</p>
+
+<figure class="fig" id="f8">
+  <div class="fig-title">Figure 8. The 18 cells of the contrast set, as rated</div>
+  <div class="fig-sub">Rows: meaning kept / lost × designed simplicity; columns: designed length. Pick what the cells show.</div>
+  <div class="controls" id="ctl-f8"></div>
+  <div class="chart" id="c-f8"></div>
+  <figcaption id="cap-f8"></figcaption>
+</figure>
+
+<p>Two weak spots stand out. In the "meaning lost" cells the single annotator often still gave high meaning scores: generated losses that drop
+a minor detail read as harmless, and lenient raters miss them (cell validity for meaning 0.64 against a 0.85 target). And some cells are
+intrinsically hard to generate: lengthening a sentence by explaining it reads as simpler even when the model is told to keep the difficulty,
+itself a sign of how entangled simplicity and length are.</p>
+
+<div class="callout plan"><div class="kicker">Planned</div>
+<ul>
+  <li><b>G1 gate, Sun 29 Nov:</b> the pilot passes H5 with three annotators → full set; otherwise re-pilot or natural data only. A third annotator is being recruited; the second is under way.</li>
+  <li><b>Prompts v2:</b> one kind of change per "one fact changed" item (entity, number, negation, relation, rotated) and cell-specific instructions for the hard cells; a 40-slot re-pilot decides whether prompts are frozen.</li>
+  <li><b>Full set:</b> 150 sources, ≈ 1,050 items; generation 30 Nov – 2 Dec, validation 3–6 Dec, annotation 7–18 Dec (≥ 50% by 13 Dec); H5 and H6 on the full set at G4 (19 Dec).</li>
+  <li><b>Larger meaning losses</b> in the "lost" cells, so that a lost key fact is unmistakable to a careful reader.</li>
+</ul></div>
+
+<h3><span class="num">5.2</span>Metrics on the contrast set</h3>
+<p>The contrast set changes what the metrics appear to measure. Figure 9 sets each metric's correlations on the contrast set against its
+average on the natural benchmarks.</p>
+
+<figure class="fig" id="f9">
+  <div class="fig-title">Figure 9. On the contrast set, simplicity metrics look better and meaning metrics look worse</div>
+  <div class="fig-sub">Correlation with human meaning (left) and simplicity (right): mean over the natural benchmarks (ring) → contrast-set pilot (dot).</div>
+  <div class="legend" id="leg-f9"></div>
+  <div class="chart" id="c-f9"></div>
+  <figcaption>The judge row uses its meaning prompt on the left and its simplicity prompt on the right (§6). Reference-based metrics (LENS, BLEU, SARI, BERTScore against references) cannot run here: contrast items have no references.</figcaption>
+</figure>
+
+<p class="finding">Readability formulas and learned simplicity metrics correlate 0.62–0.74 with human simplicity, far above their natural-data
+average, with essentially no meaning signal. Only MeaningBERT (0.51) and BERTScore against the source (0.37) track meaning; BLEU against the
+source, often used as a meaning proxy, does not (0.10).</p>
+<p>Both shifts are what the confound predicts. On natural benchmarks a readability formula's simplicity correlation is diluted wherever ρ works
+against it, and similarity to the source looks like a meaning measure partly because faithful outputs are also the ones that copy the source.
+With meaning and simplicity uncorrelated by design (ρ = 0.09 in these ratings), neither distortion is there. Length ratios behave as designed
+against the designed simplicity labels (|r| ≤ 0.04) but keep |r| ≈ 0.25 against this annotator's ratings, the size of the residual
+simplicity–length link in the ratings themselves. All three pre-registered H6 predictions fail in this pilot, in an informative direction:
+readability formulas do <em>not</em> collapse (consistent with §4), and the learned metrics' fingerprints move away from their natural-data
+values. Both need confirming on the full set.</p>
+
+<h2 id="judges"><span class="num">6</span>LLM judges</h2>
+<p>We prompt open-weight LLMs with the annotators' own definitions and scales, one prompt per dimension, temperature 0, and take the expected
+rating over the digit probabilities (G-Eval). Judges come from families other than the generators. The natural sample is at most 2,000 items per
+benchmark, drawn by whole sources (5,994 items).</p>
+<div class="callout plan" id="judge-status"><div class="kicker">Status</div></div>
+
+<h3><span class="num">6.1</span>How do judges compare with the metrics?</h3>
+<p>Figure 10 ranks the judge among all non-judge metrics on each benchmark and on the contrast set. A metric enters in its useful direction
+(e.g. "−BLEU (src)" for simplicity), and the best metric is chosen per benchmark after the fact, which favours the metrics.</p>
+
+<figure class="fig" id="f10">
+  <div class="fig-title">Figure 10. The judge against every metric</div>
+  <div class="fig-sub">Correlation with the human rating, all measures on the same items. Filled = judge significantly better (paired cluster bootstrap, 95% CI of the difference above 0); ring = not distinguishable; square = judge significantly worse.</div>
+  <div class="controls" id="ctl-f10"></div>
+  <div class="legend" id="leg-f10"></div>
+  <div class="chart" id="c-f10"></div>
+  <div class="tbl-wrap" id="t-f10"></div>
+</figure>
+
+<p class="finding">For meaning, the judge is the best or tied-best measure on 8 of 9 benchmarks, significantly better than the best metric on 5,
+and far ahead on the contrast set (0.77 against MeaningBERT's 0.51). For simplicity, it is never first on natural data but is within noise of the
+best metric on most benchmarks, and first on the contrast set by a small margin (0.78 against SIMPLE-large's 0.74).</p>
+<p>Two readings follow. The judge solves the meaning side, where the contrast set shows metrics to be weakest. On the simplicity side, a
+27B judge is roughly as good as the best metric, but which metric is best changes from benchmark to benchmark (LENS, SIMPLE, BLEU against
+the source, compression ratio), while the judge is near the top everywhere: averaged over the nine benchmarks it scores 0.59 against 0.56 for the
+best single metric.</p>
+
+<h3><span class="num">6.2</span>Do judges reward shorter outputs?</h3>
+<p>We test whether the judge's simplicity score depends on length beyond what the human ratings explain: partial r(judge S, L | human M, human S).
+For comparison we run the same test on two metrics.</p>
+
+<figure class="fig" id="f11">
+  <div class="fig-title">Figure 11. The judge treats shorter as simpler, beyond the humans</div>
+  <div class="fig-sub">Partial correlation of each measure's simplicity score with length (compression ratio), controlling for human meaning and simplicity, with 95% cluster-bootstrap CI. Shaded band: |r| &lt; 0.15, the pre-registered bias threshold.</div>
+  <div class="legend" id="leg-f11"></div>
+  <div class="chart" id="c-f11"></div>
+  <figcaption>Negative = longer outputs get lower simplicity scores than the human ratings warrant. Natural benchmarks: final for this judge. Contrast set: pilot, one annotator.</figcaption>
+</figure>
+
+<p class="finding">The pre-registered bias finding (|partial r| ≥ 0.15 with the CI excluding 0, for at least one judge) holds on natural data:
+−0.53 on Wu &amp; Arase, −0.44 on QATS 2016 and −0.30 on Scialom (human). On the contrast-set pilot it is −0.38.</p>
+<p>This is not the familiar verbosity bias of pairwise preference judges, which favour longer answers: for simplicity the judge leans the other
+way. On the natural benchmarks it leans on length more than a readability formula does (Wu &amp; Arase: −0.53 against −0.18 for FKGL). A caveat
+applies: noisy human ratings under-control for true simplicity, so part of a natural-data partial correlation can be real simplicity. The contrast
+set gives the cleaner test, because length is uncorrelated with the design, and there the picture is broader. Controlling for the designed factors
+instead of the ratings, every simplicity measure treats shorter as simpler more than the human annotator does (−0.32): the judge most (−0.61),
+but FKGL (−0.57) and SIMPLE-large (−0.54) nearly as much. The shortcut is not specific to LLM judges; they are simply not free of it.</p>
+<div class="callout plan"><div class="kicker">Planned</div>
+<ul>
+  <li><b>gpt-oss-120b</b> (second judge, native MXFP4) is running: contrast pilot, then the natural sample.</li>
+  <li>Both judges on the full contrast set after annotation; H7 final at G4 (19 Dec).</li>
+  <li>Judge fingerprints (exploratory, shown in Figure 4) with bootstrap CIs.</li>
+</ul></div>
+
+<h2 id="discussion"><span class="num">7</span>Discussion</h2>
+<p><b>What to do in practice.</b> A metric's correlation with simplicity on one benchmark says as much about that benchmark's annotators as about
+the metric. Report the benchmark's ρ next to any correlation, report fingerprints rather than raw correlations, and choose metrics by
+fingerprint: their rankings agree across benchmarks (§3). For meaning, an open LLM judge is now the strongest automatic measure we tested; for
+simplicity, no single metric wins everywhere, and the judge's length bias should be checked before it is trusted.</p>
+<p><b>What the contrast set adds.</b> On natural data, a metric's meaning signal and its copying of the source come together. When meaning,
+simplicity and length are crossed by design, most metrics that looked like meaning metrics are not, and the metrics that look like simplicity
+metrics mostly are. The contrast set is the evidence natural benchmarks cannot provide.</p>
+<p><b>Limitations.</b> English only. Nine benchmarks of very uneven size. Length measured as compression ratio. The contrast-set results here
+come from one annotator. The judges are open models from two families; closed models may behave differently. The fingerprint is linear and
+item-level; system-level conclusions may differ.</p>
+
+<h2 id="acl"><span class="num">8</span>Road to ACL: proposals</h2>
+<p class="small">These are suggestions for maximising the paper's chances at ARR, January 2027. None is adopted yet; each says what it costs.</p>
+<div class="callout proposal"><div class="kicker">Proposal · framing</div><ul>
+  <li><b>Lead with the confound and a recommendation, not with the method.</b> Figure 2 (raw correlations flip, fingerprints do not) as the
+  first figure; the take-home is "report ρ and fingerprints". The pre-registered H2 failure becomes a nuance ("transfer helps where benchmarks
+  differ"), stated plainly; pre-registration, with its hash and deviation log, is a selling point. <i>Cost: writing only.</i></li>
+  <li><b>Answer Shayegh et al. (2025) head-on</b> in the related work: MT versus simplification, system-level pairwise accuracy versus item-level
+  weights, no reliability correction, no transfer test. It is the paper reviewers are most likely to cite against novelty. <i>Cost: writing only.</i></li>
+</ul></div>
+<div class="callout proposal"><div class="kicker">Proposal · analyses that pre-empt reviewer questions</div><ul>
+  <li><b>Human ceiling for the judges.</b> With three annotators, correlate each annotator with the mean of the others and put the judge against
+  that ceiling. "0.77" means something different at a ceiling of 0.80 than at 0.95. <i>Cost: one analysis once annotation is done.</i></li>
+  <li><b>Rater-free contrast analyses as co-primary.</b> Every contrast-set result also against the validated design labels (already implemented).
+  It protects the contrast-set story against annotator noise and the annotation budget. <i>Cost: none; reporting only.</i></li>
+  <li><b>A length-controlled judge.</b> Re-run the judge on the contrast pilot with one added instruction ("length alone is not simplicity") and
+  report how its fingerprint and partial r change. That turns the bias finding into a usable recommendation. <i>Cost: about 3 GPU-hours.</i></li>
+  <li><b>Make the length test comparative.</b> On the contrast set, FKGL and SIMPLE lean on length almost as much as the judge. Report the
+  length test for every simplicity measure, not only for judges; "every automatic simplicity measure takes the length shortcut, humans less so"
+  is a stronger and more general finding than a judge-only bias. <i>Cost: the code exists; reporting only.</i></li>
+  <li><b>One closed API judge</b> (allowed by the plan if budget permits) for external validity on the contrast set and a 2,000-item natural
+  subsample. <i>Cost: small; about 10k calls.</i></li>
+  <li><b>System-level fingerprints</b> in an appendix, for the benchmarks with at least six systems, because many metric papers report
+  system-level correlations. <i>Cost: one analysis on existing scores.</i></li>
+</ul></div>
+<div class="callout proposal"><div class="kicker">Proposal · resources</div><ul>
+  <li><b>Release the contrast set</b> (items, cell labels, validator decisions, three-annotator ratings) with a datasheet, and a small
+  <span class="mono">fingerprint</span> package that takes metric scores and human ratings and returns ρ, fingerprints, the feasibility region and
+  matched-pair accuracy. Reusable artefacts weigh heavily in ARR reviews. <i>Cost: about two days.</i></li>
+  <li><b>Fingerprint cards</b>: one row per metric and judge, (β<sub>M</sub>, β<sub>S</sub>, R, stability, length retention, contrast-set r), as
+  the paper's practical table. <i>Cost: assembled from existing results.</i></li>
+</ul></div>
+
+<h2 id="appendix">Appendix</h2>
+<details class="appendix" open><summary>A. Benchmarks</summary>
+<div class="tbl-wrap"><table>
+<thead><tr><th>Benchmark</th><th class="num">Rated outputs</th><th>Systems</th><th>M / S scale</th><th>Per-rater scores</th></tr></thead>
+<tbody>
+<tr><td>Simplicity-DA (Alva-Manchego et al. 2021)</td><td class="num">600</td><td>6 pre-LLM systems</td><td>0–100 / 0–100</td><td>S only</td></tr>
+<tr><td>Structural Simplicity (Sulem et al. 2018)</td><td class="num">1,750</td><td>25 system variants</td><td>1–5 / −2…+2</td><td>no</td></tr>
+<tr><td>ASSET ratings (Alva-Manchego et al. 2020)</td><td class="num">100</td><td>6 pre-LLM systems</td><td>0–100 / 0–100</td><td>yes</td></tr>
+<tr><td>Scialom et al. 2021, human outputs</td><td class="num">110</td><td>human references</td><td>0–100 / 0–100</td><td>yes</td></tr>
+<tr><td>Scialom et al. 2021, system outputs</td><td class="num">84</td><td>7 systems</td><td>0–100 / 0–100</td><td>yes</td></tr>
+<tr><td>SimpDA 2022 (Maddela et al. 2023)</td><td class="num">360</td><td>GPT-3, MUSS, T5, humans</td><td>0–100 / 0–100</td><td>yes</td></tr>
+<tr><td>SimpLikert 2022 (Maddela et al. 2023)</td><td class="num">same 360</td><td>same as SimpDA 2022</td><td>1–5 / −2…+2</td><td>yes</td></tr>
+<tr><td>QATS 2016 (Štajner et al.)</td><td class="num">631</td><td>mixed systems</td><td>good / ok / bad</td><td>no</td></tr>
+<tr><td>Wu &amp; Arase (LLM era)</td><td class="num">6,163</td><td>GPT-4, Qwen2.5, Llama-3.2, T5</td><td>1–3 / 1–3</td><td>yes</td></tr>
+</tbody></table></div>
+<p class="small">One row, one study: a re-rating of the same outputs by other raters or with other questions counts as a separate study; copied
+ratings do not. Human scores are means over raters, standardised within each benchmark. Metrics (19): similarity to references or source
+(BLEU, SARI, iBLEU, BERTScore; BLEU and BERTScore against the source; SAMSA); learned (LENS, LENS-SALSA, MeaningBERT, SIMPLE small/base/large);
+length and readability proxies (compression ratio; output-vs-source gains in sentence length, word length, FKGL, FRE and SLE). Our scores
+reproduce all 19 recomputable correlations published in the SIMPLE paper within 0.01.</p>
+</details>
+
+<details class="appendix"><summary>B. Pre-registered hypotheses and verdicts</summary>
+<p class="small">Thresholds were frozen on 13 Nov 2026 (their hash is checked by the gate script). Statuses are computed by the same code as the
+gate reports. Contrast-set rows are from the one-annotator pilot and are exploratory.</p>
+<div id="t-checks"></div>
+</details>
+
+<details class="appendix"><summary>C. Methods in brief</summary>
+<p class="small"><b>Statistics.</b> Item-level Pearson correlations; 95% percentile cluster bootstrap over source sentences (B = 10,000, seed 13;
+B = 2,000 for the judge-versus-metric differences); DerSimonian–Laird random-effects meta-analysis on Fisher z; Holm correction within the
+confirmatory family {H1, H2, H3, H8}. <b>Reliability.</b> Split-half per dimension (random rater halves, Spearman–Brown, 200 splits);
+ρ* = ρ / √(R<sub>M</sub>R<sub>S</sub>) and c* = c / √R. <b>Ranking consistency.</b> Kendall τ<sub>b</sub> between the metric rankings of two
+benchmarks, by raw r<sub>S</sub> and by β<sub>S</sub>. <b>Length.</b> L = compression ratio; partial r(X, S | L); matched pairs = two outputs
+of one source with |ΔL| ≤ 0.05 and clearly different human simplicity. <b>Judges.</b> Qwen3.8-27B (GGUF Q8_0, thinking off) and gpt-oss-120b
+(native MXFP4, low reasoning effort), served locally with llama.cpp; expected score over the top-10 digit log-probabilities.</p>
+</details>
+
+<details class="appendix"><summary>D. Related work and novelty (scan of 17 Nov 2026)</summary>
+<p class="small"><b>Correlated criteria in meta-evaluation.</b> Ernst et al. (2023) show on SummEval that metrics designed for one criterion
+appear to correlate with others because the human criteria correlate, and remove the effect by stratifying. Shayegh et al. (2025) study the
+adequacy–fluency trade-off in MT and find WMT meta-evaluation favours adequacy metrics partly because of its systems. Xiao et al. (2023) bring
+measurement theory to metric evaluation; Pagnoni et al. (2021) use partial correlations for factuality metrics. Instability of metric
+conclusions across datasets is documented by Bhandari et al. (2020) and Dai et al. (2024), without an explanation through the human correlation.
+<b>Psychometrics.</b> The feasibility bound on a correlation given two others is classical (Stanley &amp; Wang 1969; Glass &amp; Collins 1970;
+Olkin 1981); correction for attenuation goes back to Spearman (1904). <b>Simplification.</b> SARI (Xu et al. 2016); the BLEU critique of Sulem et
+al. (2018); Alva-Manchego et al. (2021); SLE (Cripwell et al. 2023) observes that metrics conflate simplicity with meaning and reports different
+simplicity–adequacy correlations on two benchmarks; LENS, SALSA; LLM-era evaluation (Wu &amp; Arase). <b>Length.</b> Napoles et al. (2011) ask for
+comparisons at equal compression; Martin et al. (2018) find simplicity on QATS best predicted by length features; verbosity bias of LLM judges is
+established in pairwise preference (Zheng et al. 2023; Dubois et al. 2024). <b>Contrast sets.</b> Gardner et al. (2020), CheckList, perturbation
+suites for metrics (DEMETR; He et al. 2023), APPLS (Guo et al. 2024): one factor at a time, mostly not human-rated.</p>
+<p class="small"><b>What is new.</b> Others observed the effect within single datasets; none models it, corrects it for rating noise, tests its
+predictions across benchmarks, or studies it in simplification, where the tension between meaning and simplicity defines the task. New here:
+the meta-analysis of ρ, reliability-corrected fingerprints with transfer and ranking tests, length deconfounding across nine benchmarks, a
+factorial human-rated contrast set, and the LLM-judge length test for simplicity.</p>
+</details>
+
+<details class="appendix"><summary>E. Timeline</summary>
+<div class="tbl-wrap"><table>
+<thead><tr><th>Gate</th><th>Date</th><th>Decides</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>G0 Feasibility</td><td>Thu 19 Nov</td><td>Benchmarks, annotators, ethics, novelty</td><td><span class="badge pass">Done</span> 9 benchmarks, ethics approved, novelty scan; 2 of 3 annotators</td></tr>
+<tr><td>G1 Pilot</td><td>Sun 29 Nov</td><td>Contrast set passes H5 → full set</td><td><span class="badge warn">In progress</span> pilot rated by 1 of 3 annotators</td></tr>
+<tr><td>G2 Story</td><td>Sun 6 Dec</td><td>Paper framing from Experiment 1</td><td><span class="badge pass">Results ready</span> pre-registered rule points to the descriptive framing</td></tr>
+<tr><td>G3 Production</td><td>Sun 13 Dec</td><td>Full set validated, annotation ≥ 50%, judges on natural data</td><td><span class="badge warn">In progress</span> judge 1 of 2 done on natural data</td></tr>
+<tr><td>G4 Data complete</td><td>Sat 19 Dec</td><td>Annotation done; H5, H6, H7</td><td><span class="badge plan">Planned</span></td></tr>
+<tr><td>G5 Draft freeze</td><td>Mon 28 Dec</td><td>Internal review; submission Sat 2 Jan 2027</td><td><span class="badge plan">Planned</span></td></tr>
+</tbody></table></div>
+</details>
+</div>
+
+<footer>
+  Built from commit <span class="mono" data-bind="commit"></span> on <span data-bind="generated"></span>. Figures are computed from the
+  project's result files; only aggregates are shown (no item texts, no per-item human ratings). Benchmark data belong to their authors.
+</footer>
+</main>
+</body>
+</html>
