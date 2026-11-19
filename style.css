@@ -181,3 +181,7 @@ footer { max-width: 720px; margin: 60px auto 0; font-family: var(--sans); font-s
   h2 { font-size: 21px; }
   figure.fig { padding: 12px 10px; border-radius: 10px; }
 }
+
+/* Figure 10 summary table: eight columns in the figure width */
+#t-f10 table { font-size: 13px; }
+#t-f10 th, #t-f10 td { padding: 5px 6px; }
