@@ -112,15 +112,112 @@ negative, no metric can correlate strongly with both meaning and simplicity: the
   <figcaption>"Disattenuated" corrects each correlation for rating noise (split-half reliability, on the benchmarks that release per-rater scores).</figcaption>
 </figure>
 
-<h2 id="fingerprints"><span class="num">3</span>Fingerprints: describing a metric once ρ is removed</h2>
-<p>For a metric X on one benchmark, let c = (r<sub>M</sub>, r<sub>S</sub>) be its correlations with the human ratings and Σ the 2 × 2 human
-correlation matrix with off-diagonal ρ. The fingerprint is the vector of standardised regression weights of X on M and S:</p>
-<div class="eq">β = Σ<sup>−1</sup> c, &nbsp; i.e. &nbsp; β<sub>M</sub> = (r<sub>M</sub> − ρ r<sub>S</sub>) / (1 − ρ²), &nbsp; β<sub>S</sub> = (r<sub>S</sub> − ρ r<sub>M</sub>) / (1 − ρ²), &nbsp; R² = βᵀc.</div>
-<p>R, the multiple correlation, says how much of the human signal the metric captures; we interpret a fingerprint only where R ≥ 0.20.
-Run backwards, a fingerprint predicts a metric's raw correlations on a new benchmark from that benchmark's ρ: ĉ = Σ<sub>new</sub> β.</p>
+<h2 id="fingerprints"><span class="num">3</span>Fingerprints: what a metric responds to, once ρ is removed</h2>
 
+<h3><span class="num">3.1</span>The intuition</h3>
+<p>Think of a metric's score as a recipe with two ingredients: some amount of "does the output keep the meaning of the source?" and some
+amount of "is it simpler than the source?". The <b>fingerprint</b> is that recipe, written as two numbers:</p>
+<ul>
+  <li><b>β<sub>M</sub></b>, the <em>weight on meaning</em>: how much the metric's score moves with human meaning ratings when simplicity is held fixed;</li>
+  <li><b>β<sub>S</sub></b>, the <em>weight on simplicity</em>: how much it moves with human simplicity ratings when meaning is held fixed.</li>
+</ul>
+<p>The usual validation correlation does not measure this recipe. A metric that cares only about meaning will still correlate with
+simplicity on a benchmark where the faithful outputs also happen to be the simple ones: it picks simplicity up <em>through</em> meaning.
+Each raw correlation is the sum of a direct path, which belongs to the metric, and an indirect path through the other rating, whose size
+is set by the benchmark's ρ:</p>
+<div class="eq">r(X, S) = β<sub>S</sub> + ρ · β<sub>M</sub> &nbsp;&nbsp;and&nbsp;&nbsp; r(X, M) = β<sub>M</sub> + ρ · β<sub>S</sub><br>
+<span class="small">raw correlation = direct path + path through the other rating</span></div>
+<p>The fingerprint keeps the direct paths and removes the indirect ones. Pick a metric and a benchmark in Figure 4 to see the two paths with
+real numbers.</p>
+
+<figure class="fig" id="f4x">
+  <div class="fig-title">Figure 4. Anatomy of a fingerprint</div>
+  <div class="fig-sub">Left: the two human ratings, their correlation ρ, and the metric's direct weights (arrow width = size; blue = positive, red = negative). Right: the computation, and each raw correlation split into its direct and indirect paths.</div>
+  <div class="controls" id="ctl-f4x"></div>
+  <div class="two-col wide-left">
+    <div class="chart" id="c-f4x-diagram"></div>
+    <div><div class="steps" id="c-f4x-steps"></div></div>
+  </div>
+  <div class="legend" id="leg-f4x"></div>
+  <div class="chart" id="c-f4x-bars"></div>
+  <figcaption id="cap-f4x"></figcaption>
+</figure>
+
+<p><b>Three examples.</b></p>
+<p><em>BERTScore, a meaning metric that borrows simplicity.</em> On Simplicity-DA (ρ = 0.74) BERTScore correlates +0.56 with human
+simplicity, which would make it a respectable simplicity metric. Split into paths, +0.55 of that arrives through meaning
+(0.74 × β<sub>M</sub> = 0.74) and only +0.01 is direct. On Structural Simplicity (ρ = −0.37) the same meaning path contributes −0.30, and
+the raw correlation becomes −0.22. Its weight on simplicity stays near zero on both (+0.01 and +0.08): BERTScore measures meaning, and its
+"simplicity correlation" is borrowed from the benchmark.</p>
+<p><em>SIMPLE-large, the mirror case.</em> β<sub>S</sub> = +0.58 on both benchmarks, with a small β<sub>M</sub> (+0.16, +0.15). Its correlation
+with <em>meaning</em> is the borrowed one: +0.59 on Simplicity-DA, −0.07 on Structural Simplicity.</p>
+<p><em>Compression ratio, where the paths cancel.</em> On Simplicity-DA, compression ratio correlates only +0.08 with simplicity and would be
+dismissed as unrelated to it. Its fingerprint says the opposite: β<sub>S</sub> = −0.56 (longer outputs are less simple) and
+β<sub>M</sub> = +0.87 (longer outputs keep more content). The meaning path adds 0.74 × 0.87 = +0.64, which almost exactly cancels the direct
+−0.56. On Structural Simplicity both paths point the same way and the raw correlation is −0.71. A raw correlation near zero can hide two strong,
+opposite effects.</p>
+
+<h3><span class="num">3.2</span>How it is computed</h3>
+<p>Within one benchmark, the fingerprint is the pair of standardised coefficients of a regression of the metric's score X on the mean
+human meaning (M) and simplicity (S) ratings. It needs only three correlations, all of which a standard metric evaluation already
+reports or can report:</p>
+<ol>
+  <li><b>ρ = r(M, S)</b>, the correlation between the two human ratings on that benchmark;</li>
+  <li><b>r<sub>M</sub> = r(X, M)</b> and <b>r<sub>S</sub> = r(X, S)</b>, the metric's usual validation correlations;</li>
+  <li>solve the two path equations of §3.1 for the weights:</li>
+</ol>
+<div class="eq">β<sub>M</sub> = (r<sub>M</sub> − ρ r<sub>S</sub>) / (1 − ρ²) &nbsp;&nbsp;&nbsp; β<sub>S</sub> = (r<sub>S</sub> − ρ r<sub>M</sub>) / (1 − ρ²)<br>
+<span class="small">in matrix form β = Σ<sup>−1</sup>c, with Σ = [[1, ρ], [ρ, 1]] and c = (r<sub>M</sub>, r<sub>S</sub>)</span></div>
+<p>A third number says how much the fingerprint can be trusted. <b>R² = β<sub>M</sub> r<sub>M</sub> + β<sub>S</sub> r<sub>S</sub></b> is the
+share of the metric's variance that the two human ratings explain together, and R is the correlation between the metric and the best linear
+mix of the two ratings. When R is small the metric barely relates to either rating and the direction of its fingerprint means little; we
+interpret a fingerprint only where R ≥ 0.20 (hollow marks elsewhere). Confidence intervals come from a cluster bootstrap over source sentences.
+Because only correlations enter, fingerprints are comparable across benchmarks with different rating scales (0–100 sliders, 1–5 Likert,
+good/ok/bad).</p>
+
+<h3><span class="num">3.3</span>Playground: one fingerprint, nine benchmarks</h3>
+<p>Run the equations forwards and a fingerprint predicts the raw correlations a metric would show on any benchmark, from that benchmark's ρ
+alone. Set a fingerprint below, or load a real metric's average one, and see what each of our nine benchmarks would report.</p>
+
+<figure class="fig" id="f5x">
+  <div class="fig-title">Figure 5. The same metric, seen through nine benchmarks</div>
+  <div class="fig-sub">Lines: the raw correlations implied by the fingerprint at every ρ. Dots: the nine benchmarks at their own ρ. Shaded: values of ρ at which this fingerprint is impossible (R would exceed 1).</div>
+  <div class="controls" id="ctl-f5x"></div>
+  <div class="legend" id="leg-f5x"></div>
+  <div class="chart" id="c-f5x"></div>
+  <figcaption id="cap-f5x"></figcaption>
+</figure>
+
+<h3><span class="num">3.4</span>Reading a fingerprint</h3>
+<p>Five profiles cover almost every metric we tested (averages over the benchmarks where each metric is aligned; Figure 6 places them all):</p>
+<div class="tbl-wrap"><table>
+<thead><tr><th>Profile</th><th>β<sub>M</sub></th><th>β<sub>S</sub></th><th>What it rewards</th><th>Examples (mean β<sub>M</sub>, β<sub>S</sub>)</th></tr></thead>
+<tbody>
+<tr><td>Meaning only</td><td>+</td><td>≈ 0</td><td>keeping the content, whatever the difficulty</td><td>MeaningBERT (0.64, 0.01), BERTScore (0.57, 0.06), BLEU (0.58, −0.07)</td></tr>
+<tr><td>Simplicity only</td><td>≈ 0</td><td>+</td><td>easier text, whatever happened to the content</td><td>SIMPLE-large (0.04, 0.51), SIMPLE-base (0.05, 0.51)</td></tr>
+<tr><td>Both</td><td>+</td><td>+</td><td>a good simplification: simpler and faithful</td><td>LENS (0.22, 0.43), LENS-SALSA (0.30, 0.38)</td></tr>
+<tr><td>Simpler by dropping content</td><td>−</td><td>+</td><td>outputs that got simpler by losing information</td><td>sentence-length gain (−0.50, 0.39), ΔSLE (−0.44, 0.45), FKGL gain (−0.31, 0.30)</td></tr>
+<tr><td>Copies the source</td><td>+</td><td>−</td><td>staying close to the source: faithful but no simpler</td><td>BLEU vs source (0.55, −0.40), compression ratio (0.53, −0.42), BERTScore vs source (0.64, −0.26)</td></tr>
+</tbody></table></div>
+<p>The profiles answer the question a practitioner actually has. "Does this metric measure simplicity?" becomes "how much of it is
+simplicity, how much is meaning, and with which sign?". A metric in the bottom two rows can look like a good simplicity metric or a good
+meaning metric on one benchmark, depending on ρ, while rewarding the wrong thing for the other dimension.</p>
+
+<h3><span class="num">3.5</span>What a fingerprint is not</h3>
+<ul>
+  <li><b>Not causal.</b> It describes what the score co-varies with in one benchmark's outputs, holding the other rating fixed. A different mix
+  of systems can shift it, which is why stability is tested below rather than assumed.</li>
+  <li><b>Not defined when the ratings coincide.</b> The division by 1 − ρ² means that as |ρ| approaches 1 the two ratings carry the same
+  information and the weights cannot be told apart; uncertainty grows by 1/(1 − ρ²). On our benchmarks (|ρ| ≤ 0.74) that factor is at most 2.2.</li>
+  <li><b>Only as good as its two dimensions.</b> Anything else the metric tracks (fluency, length) is either unexplained (lower R) or, if it
+  correlates with M or S, attributed to them. §4 adds length as a third dimension with the same formula and a 3 × 3 Σ.</li>
+  <li><b>Attenuated by noisy ratings.</b> Rater noise shrinks every correlation; the disattenuated variant (Figure 3, Appendix C) corrects for it
+  on the benchmarks with per-rater scores.</li>
+</ul>
+
+<h3><span class="num">3.6</span>Fingerprints are stable across benchmarks</h3>
 <figure class="fig" id="f4">
-  <div class="fig-title">Figure 4. Fingerprints are stable across benchmarks for most metrics</div>
+  <div class="fig-title">Figure 6. Fingerprints are stable across benchmarks for most metrics</div>
   <div class="fig-sub">Mean fingerprint (β<sub>M</sub>, β<sub>S</sub>) per metric over the benchmarks where it is aligned; whiskers = ±1 SD across benchmarks. Pick a metric to see its benchmark-level fingerprints.</div>
   <div class="controls" id="ctl-f4"></div>
   <div class="legend" id="leg-f4"></div>
@@ -134,7 +231,7 @@ the median SD falls from 0.225 for the raw correlation to 0.138 for the fingerpr
 fingerprints are stable. Stability matters in practice because it makes metric <em>rankings</em> agree across benchmarks.</p>
 
 <figure class="fig" id="f5">
-  <div class="fig-title">Figure 5. Fingerprints rank metrics consistently where raw correlations do not</div>
+  <div class="fig-title">Figure 7. Fingerprints rank metrics consistently where raw correlations do not</div>
   <div class="fig-sub">Every pair of benchmarks: gain in Kendall τ between the two metric rankings when metrics are ranked by β<sub>S</sub> instead of raw r<sub>S</sub>, against the difference in ρ.</div>
   <div class="chart" id="c-f5"></div>
   <figcaption id="cap-f5"></figcaption>
@@ -145,7 +242,7 @@ baseline (the mean raw correlations of the other benchmarks), does not hold. The
 and the fingerprint wins for 19 of 19 metrics. The gain is concentrated where it should be: on benchmarks whose ρ is far from the others'.</p>
 
 <figure class="fig" id="f6">
-  <div class="fig-title">Figure 6. Transfer helps where benchmarks differ</div>
+  <div class="fig-title">Figure 8. Transfer helps where benchmarks differ</div>
   <div class="fig-sub">Leave-one-benchmark-out: reduction in prediction error by the fingerprint over the naive baseline, against how far the held-out benchmark's ρ is from the mean of the others.</div>
   <div class="chart" id="c-f6"></div>
   <figcaption>Spearman ρ between gain and distance = 0.90 (exploratory, added after seeing the results). With four of nine benchmarks near ρ = 0, the pre-registered 40% target was out of reach by construction.</figcaption>
@@ -158,7 +255,7 @@ We take length as the compression ratio (output tokens / source tokens) and ask,
 survives once length is held fixed.</p>
 
 <figure class="fig" id="f7">
-  <div class="fig-title">Figure 7. Only length-based proxies are pure length</div>
+  <div class="fig-title">Figure 9. Only length-based proxies are pure length</div>
   <div class="fig-sub">(a) r(S, L) per benchmark. (b) |r(X, S)| raw → with length partialled out, averaged over benchmarks where |r(S, L)| ≥ 0.30. (c) Accuracy at ordering two outputs of the same source that have equal length but clearly different human simplicity.</div>
   <div class="legend" id="leg-f7"></div>
   <div class="chart" id="c-f7a"></div>
@@ -195,7 +292,7 @@ and length −0.12. Simplicity and length are still weakly linked in the ratings
 little harder even when the design keeps their difficulty fixed.</p>
 
 <figure class="fig" id="f8">
-  <div class="fig-title">Figure 8. The 18 cells of the contrast set, as rated</div>
+  <div class="fig-title">Figure 10. The 18 cells of the contrast set, as rated</div>
   <div class="fig-sub">Rows: meaning kept / lost × designed simplicity; columns: designed length. Pick what the cells show.</div>
   <div class="controls" id="ctl-f8"></div>
   <div class="chart" id="c-f8"></div>
@@ -216,11 +313,11 @@ itself a sign of how entangled simplicity and length are.</p>
 </ul></div>
 
 <h3><span class="num">5.2</span>Metrics on the contrast set</h3>
-<p>The contrast set changes what the metrics appear to measure. Figure 9 sets each metric's correlations on the contrast set against its
+<p>The contrast set changes what the metrics appear to measure. Figure 11 sets each metric's correlations on the contrast set against its
 average on the natural benchmarks.</p>
 
 <figure class="fig" id="f9">
-  <div class="fig-title">Figure 9. On the contrast set, simplicity metrics look better and meaning metrics look worse</div>
+  <div class="fig-title">Figure 11. On the contrast set, simplicity metrics look better and meaning metrics look worse</div>
   <div class="fig-sub">Correlation with human meaning (left) and simplicity (right): mean over the natural benchmarks (ring) → contrast-set pilot (dot).</div>
   <div class="legend" id="leg-f9"></div>
   <div class="chart" id="c-f9"></div>
@@ -245,11 +342,11 @@ benchmark, drawn by whole sources (5,994 items).</p>
 <div class="callout plan" id="judge-status"><div class="kicker">Status</div></div>
 
 <h3><span class="num">6.1</span>How do judges compare with the metrics?</h3>
-<p>Figure 10 ranks the judge among all non-judge metrics on each benchmark and on the contrast set. A metric enters in its useful direction
+<p>Figure 12 ranks the judge among all non-judge metrics on each benchmark and on the contrast set. A metric enters in its useful direction
 (e.g. "−BLEU (src)" for simplicity), and the best metric is chosen per benchmark after the fact, which favours the metrics.</p>
 
 <figure class="fig" id="f10">
-  <div class="fig-title">Figure 10. The judge against every metric</div>
+  <div class="fig-title">Figure 12. The judge against every metric</div>
   <div class="fig-sub">Correlation with the human rating, all measures on the same items. Filled = judge significantly better (paired cluster bootstrap, 95% CI of the difference above 0); ring = not distinguishable; square = judge significantly worse.</div>
   <div class="controls" id="ctl-f10"></div>
   <div class="legend" id="leg-f10"></div>
@@ -270,7 +367,7 @@ best single metric.</p>
 For comparison we run the same test on two metrics.</p>
 
 <figure class="fig" id="f11">
-  <div class="fig-title">Figure 11. The judge treats shorter as simpler, beyond the humans</div>
+  <div class="fig-title">Figure 13. The judge treats shorter as simpler, beyond the humans</div>
   <div class="fig-sub">Partial correlation of each measure's simplicity score with length (compression ratio), controlling for human meaning and simplicity, with 95% cluster-bootstrap CI. Shaded band: |r| &lt; 0.15, the pre-registered bias threshold.</div>
   <div class="legend" id="leg-f11"></div>
   <div class="chart" id="c-f11"></div>
@@ -289,7 +386,7 @@ but FKGL (−0.57) and SIMPLE-large (−0.54) nearly as much. The shortcut is no
 <ul>
   <li><b>gpt-oss-120b</b> (second judge, native MXFP4) is running: contrast pilot, then the natural sample.</li>
   <li>Both judges on the full contrast set after annotation; H7 final at G4 (19 Dec).</li>
-  <li>Judge fingerprints (exploratory, shown in Figure 4) with bootstrap CIs.</li>
+  <li>Judge fingerprints (exploratory, shown in Figure 6) with bootstrap CIs.</li>
 </ul></div>
 
 <h2 id="discussion"><span class="num">7</span>Discussion</h2>

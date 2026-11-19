@@ -264,7 +264,7 @@
   }
   figure(renderF3);
 
-  // ---------------------------------------------------------------- Figure 4: fingerprint map
+  // ---------------------------------------------------------------- Figure 6: fingerprint map (data shared with Figures 4 and 5)
   const s4 = { metric: "" };
   function fpSummary(rows) {
     const out = {};
@@ -280,10 +280,174 @@
   }
   const fpMetrics = fpSummary(fpObs);
   const fpJudge = fpSummary(E3.judge_fingerprints).map((d) => ({ ...d, name: d.metric === JS ? "Judge, simplicity prompt" : "Judge, meaning prompt", g: "llm" }));
+  // ---------------------------------------------------------------- Figure 4 (explainer): anatomy of a fingerprint
+  const s4x = { metric: "bertscore", bench: "simpda" };
+  (function () {
+    const box = $("ctl-f4x");
+    const ms = metricOrder([...new Set(fpObs.map((r) => r.metric))]);
+    select(box, "Metric", ms.map((m) => [m, mName(m)]), s4x.metric, (v) => { s4x.metric = v; renderF4x(); });
+    select(box, "Benchmark", benchOptions, s4x.bench, (v) => { s4x.bench = v; renderF4x(); });
+  })();
+  function pathDiagram(node, rho, bM, bS, name, R) {
+    const W = Math.min(widthOf(node, 440), 440), H = 250;
+    const svg = d3.create("svg").attr("width", W).attr("height", H).attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img")
+      .attr("aria-label", `Path diagram: rho ${f2(rho)}, weight on meaning ${f2(bM)}, weight on simplicity ${f2(bS)}`)
+      .style("font-family", FONT).style("font-size", "13px");
+    const col = (b) => (b >= 0 ? T.pos : T.neg);
+    const defs = svg.append("defs");
+    for (const [id, c] of [["ah-ink", T.ink2]]) {
+      defs.append("marker").attr("id", id).attr("viewBox", "0 0 10 10").attr("refX", 8).attr("refY", 5).attr("markerUnits", "userSpaceOnUse")
+        .attr("markerWidth", 12).attr("markerHeight", 12).attr("orient", "auto-start-reverse").append("path").attr("d", "M0,0L10,5L0,10z").attr("fill", c);
+    }
+    const nodeBox = (x, y, w, label, sub) => {
+      const g = svg.append("g").attr("transform", `translate(${x},${y})`);
+      g.append("rect").attr("x", -w / 2).attr("y", -20).attr("width", w).attr("height", 40).attr("rx", 8).attr("fill", T.surface).attr("stroke", T.axis);
+      g.append("text").attr("text-anchor", "middle").attr("dy", sub ? -2 : 4).attr("fill", T.ink).attr("font-weight", 600).text(label);
+      if (sub) g.append("text").attr("text-anchor", "middle").attr("dy", 13).attr("fill", T.ink2).attr("font-size", 11).text(sub);
+    };
+    const xL = 70, xR = W - 72, yM = 42, yS = 208, yX = 125;
+    // rho: the benchmark's correlation between the two ratings
+    svg.append("path").attr("d", `M ${xL - 40} ${yM + 22} C ${xL - 75} ${yM + 70}, ${xL - 75} ${yS - 70}, ${xL - 40} ${yS - 22}`)
+      .attr("fill", "none").attr("stroke", T.ink2).attr("stroke-width", 1.5).attr("marker-start", "url(#ah-ink)").attr("marker-end", "url(#ah-ink)");
+    svg.append("text").attr("x", xL - 22).attr("y", yX - 6).attr("fill", T.ink).attr("font-weight", 600).text(`ρ = ${sg(rho)}`);
+    svg.append("text").attr("x", xL - 22).attr("y", yX + 10).attr("fill", T.ink2).attr("font-size", 11).text("the benchmark");
+    // direct weights
+    const arrow = (y0, b, lab, id) => {
+      const x0 = xL + 52, x1 = xR - 66, y1 = yX + (y0 < yX ? -10 : 10);
+      const sw = 1.5 + 10 * Math.min(1, Math.abs(b)), head = Math.max(11, 2.4 * sw);
+      defs.append("marker").attr("id", id).attr("viewBox", "0 0 10 10").attr("refX", 8).attr("refY", 5).attr("markerUnits", "userSpaceOnUse")
+        .attr("markerWidth", head).attr("markerHeight", head).attr("orient", "auto").append("path").attr("d", "M0,0L10,5L0,10z").attr("fill", col(b));
+      const len = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+      svg.append("line").attr("x1", x0).attr("y1", y0).attr("x2", x1 - ux * head * 0.6).attr("y2", y1 - uy * head * 0.6).attr("stroke", col(b))
+        .attr("stroke-width", sw).attr("stroke-opacity", 0.85).attr("marker-end", `url(#${id})`);
+      // label beside the line's first third, on the outer side (away from the other arrow)
+      const nx = y0 < yX ? uy : -uy, ny = y0 < yX ? -ux : ux, off = sw / 2 + 12;
+      const px = x0 + (x1 - x0) * 0.42 + nx * off, py = y0 + (y1 - y0) * 0.42 + ny * off;
+      svg.append("text").attr("x", px).attr("y", py + (y0 < yX ? 0 : 10)).attr("text-anchor", "start").attr("fill", T.ink).attr("font-weight", 600).text(lab);
+    };
+    arrow(yM, bM, `βM = ${sg(bM)}`, "ah-m");
+    arrow(yS, bS, `βS = ${sg(bS)}`, "ah-s");
+    nodeBox(xL, yM, 104, "Meaning (M)", "human rating");
+    nodeBox(xL, yS, 104, "Simplicity (S)", "human rating");
+    nodeBox(xR, yX, 128, name.length > 16 ? name.slice(0, 15) + "…" : name, `R = ${f2(R)}`);
+    return svg.node();
+  }
+  function renderF4x() {
+    const r = fpObs.find((d) => d.metric === s4x.metric && d.resource === s4x.bench);
+    if (!r) {
+      put("c-f4x-diagram", el("p", { class: "note", text: `${mName(s4x.metric)} has no scores on ${bName(s4x.bench)}.` }));
+      $("c-f4x-steps").replaceChildren(); $("c-f4x-bars").replaceChildren(); $("cap-f4x").textContent = "";
+      return;
+    }
+    const name = mName(r.metric), rho = r.rho, rM = r.r_M, rS = r.r_S, bM = r.beta_M, bS = r.beta_S;
+    const R = Math.sqrt(Math.max(0, r.R2)), aligned = r.R2 >= ALIGNED_R2;
+    put("c-f4x-diagram", pathDiagram($("c-f4x-diagram"), rho, bM, bS, name, R));
+    const li = (head, calc) => el("li", {}, el("span", { text: head }), calc ? el("span", { class: "calc", text: calc }) : null);
+    $("c-f4x-steps").replaceChildren(el("ol", {},
+      li(`The benchmark: ρ = r(M, S) = ${sg(rho)}`),
+      li(`The metric's raw correlations: r(X, M) = ${sg(rM)}, r(X, S) = ${sg(rS)}`),
+      li(`Weight on meaning: βM = (rM − ρ·rS) / (1 − ρ²)`, `= (${f2(rM)} − ${f2(rho)} × ${f2(rS)}) / (1 − ${f2(rho)}²) = ${sg(bM)}`),
+      li(`Weight on simplicity: βS = (rS − ρ·rM) / (1 − ρ²)`, `= (${f2(rS)} − ${f2(rho)} × ${f2(rM)}) / (1 − ${f2(rho)}²) = ${sg(bS)}`),
+      li(`Fit: R = √(βM·rM + βS·rS) = ${f2(R)}`, aligned ? "aligned (R ≥ 0.20): the fingerprint is interpreted" : "not aligned (R < 0.20): direction not interpreted")),
+      el("p", { class: "note", text: "Computed at full precision; the displayed inputs are rounded." }));
+    const P1 = "direct path (the metric)", P2 = "through the other rating (ρ × other weight)";
+    legend("leg-f4x", [{ label: P1, color: T.s1, kind: "bar" }, { label: P2, color: T.s2, kind: "bar" }, { label: "raw correlation", color: T.ink, kind: "line" }]);
+    const rowS = `r(X, S) = ${sg(rS)}`, rowM = `r(X, M) = ${sg(rM)}`;
+    const parts = [
+      { row: rowS, part: P1, v: bS, c: T.s1 }, { row: rowS, part: P2, v: rho * bM, c: T.s2 },
+      { row: rowM, part: P1, v: bM, c: T.s1 }, { row: rowM, part: P2, v: rho * bS, c: T.s2 },
+    ];
+    const tot = [{ row: rowS, v: rS }, { row: rowM, v: rM }];
+    const node = $("c-f4x-bars"); const width = Math.min(widthOf(node, 760), 760);
+    put("c-f4x-bars", plot({
+      width, height: 120, marginLeft: 118, marginRight: 20,
+      x: { domain: [-1.2, 1.2], label: "contribution to the raw correlation", grid: true, tickFormat: (x) => sg(x, 1) },
+      y: { domain: [rowS, rowM], label: null },
+      marks: [
+        Plot.barX(parts, Plot.stackX({ x: "v", y: "row", fill: (d) => d.c, insetTop: 8, insetBottom: 8, rx: 3, tip: true,
+          title: (d) => `${d.part}\n${sg(d.v)}` })),
+        Plot.ruleX([0], { stroke: T.ink2 }),
+        Plot.tickX(tot, { x: "v", y: "row", stroke: T.ink, strokeWidth: 2.5 }),
+      ],
+    }));
+    $("cap-f4x").textContent = `Of ${name}'s correlation with simplicity on ${bName(s4x.bench)} (${sg(rS)}), ${sg(bS)} is direct and ${sg(rho * bM)} arrives through meaning; ` +
+      `of its correlation with meaning (${sg(rM)}), ${sg(bM)} is direct and ${sg(rho * bS)} arrives through simplicity.` +
+      (aligned ? "" : " R < 0.20: the metric barely relates to the two ratings here, so its fingerprint is not interpreted.");
+  }
+  figure(renderF4x);
+
+  // ---------------------------------------------------------------- Figure 5 (explainer): playground
+  const s5x = { bM: 0.6, bS: 0.0 };
+  const PROFILES = [
+    ["meaning", "Profile: meaning only", 0.6, 0.0], ["simplicity", "Profile: simplicity only", 0.0, 0.55], ["both", "Profile: both", 0.3, 0.45],
+    ["drop", "Profile: simpler by dropping content", -0.4, 0.4], ["copy", "Profile: copies the source", 0.55, -0.4],
+  ];
+  const sliders = {};
+  (function () {
+    const box = $("ctl-f5x");
+    for (const [k, lab] of [["bM", "βM, weight on meaning"], ["bS", "βS, weight on simplicity"]]) {
+      const inp = el("input", { type: "range", min: "-1", max: "1", step: "0.01", value: String(s5x[k]), "aria-label": lab });
+      const val = el("span", { class: "slider-val", text: sg(s5x[k]) });
+      inp.addEventListener("input", () => { s5x[k] = Number(inp.value); val.textContent = sg(s5x[k]); renderF5x(); });
+      sliders[k] = { inp, val };
+      box.append(el("label", {}, document.createTextNode(lab), inp, val));
+    }
+    const opts = [["", "Load…"], ...PROFILES.map((p) => [p[0], p[1]]),
+      ...metricOrder(fpMetrics.map((d) => d.metric)).map((m) => [`m:${m}`, `${mName(m)} (mean fingerprint)`])];
+    select(box, "", opts, "", (v) => {
+      let bM, bS;
+      const p = PROFILES.find((q) => q[0] === v);
+      if (p) { bM = p[2]; bS = p[3]; } else if (v.startsWith("m:")) { const d = fpMetrics.find((q) => q.metric === v.slice(2)); bM = d.bM; bS = d.bS; } else return;
+      s5x.bM = Math.round(bM * 100) / 100; s5x.bS = Math.round(bS * 100) / 100;
+      for (const k of ["bM", "bS"]) { sliders[k].inp.value = String(s5x[k]); sliders[k].val.textContent = sg(s5x[k]); }
+      renderF5x();
+    });
+  })();
+  function renderF5x() {
+    const { bM, bS } = s5x;
+    legend("leg-f5x", [{ label: "r(X, S), correlation with human simplicity", color: T.s1, kind: "line" }, { label: "r(X, M), correlation with human meaning", color: T.s2, kind: "line" }]);
+    const grid = d3.range(-0.95, 0.951, 0.01).map((rho) => ({ rho, rS: bS + rho * bM, rM: bM + rho * bS }));
+    const R2 = (rho) => bM * bM + bS * bS + 2 * rho * bM * bS;
+    // impossible values of rho: R^2 > 1 (R^2 is linear in rho)
+    let bad = null;
+    if (bM * bS !== 0) {
+      const t = (1 - bM * bM - bS * bS) / (2 * bM * bS);
+      if (bM * bS > 0 && t < 0.95) bad = [Math.max(-0.95, t), 0.95];
+      if (bM * bS < 0 && t > -0.95) bad = [-0.95, Math.min(0.95, t)];
+    } else if (bM * bM + bS * bS > 1) bad = [-0.95, 0.95];
+    const pts = E1.rho.studies.map((s) => ({ name: bName(s.label), rho: s.rho, rS: bS + s.rho * bM, rM: bM + s.rho * bS, ok: R2(s.rho) <= 1 }));
+    const node = $("c-f5x"); const width = Math.min(widthOf(node, 760), 760);
+    const tip = (d) => `${d.name} (ρ = ${f2(d.rho)})\nr(X, S) = ${sg(d.rS)}\nr(X, M) = ${sg(d.rM)}` + (d.ok ? "" : "\nimpossible here (R > 1)");
+    const ends = pts.filter((d) => d.name === bName("structural") || d.name === bName("simpda"));
+    put("c-f5x", plot({
+      width, height: 330, marginLeft: 44, marginRight: 20,
+      x: { domain: [-0.95, 0.95], label: "ρ = r(M, S) of a benchmark →", grid: true, tickFormat: (x) => sg(x, 1) },
+      y: { domain: [-1, 1], label: "↑ raw correlation the benchmark would report", grid: true, tickFormat: (x) => sg(x, 1) },
+      marks: [
+        bad ? Plot.rectX([0], { x1: bad[0], x2: bad[1], fill: T.wash }) : null,
+        Plot.ruleY([0], { stroke: T.axis }),
+        Plot.line(grid, { x: "rho", y: "rS", stroke: T.s1, strokeWidth: 2 }),
+        Plot.line(grid, { x: "rho", y: "rM", stroke: T.s2, strokeWidth: 2 }),
+        Plot.dot(pts, { x: "rho", y: "rM", r: 4.5, fill: T.s2, stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
+        Plot.dot(pts, { x: "rho", y: "rS", r: 4.5, fill: T.s1, stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
+        Plot.text(ends, { x: "rho", y: "rS", text: "name", dy: -12, fill: T.ink, fontSize: 11 }),
+      ],
+    }));
+    const rs = pts.map((d) => d.rS), lo = pts[rs.indexOf(Math.min(...rs))], hi = pts[rs.indexOf(Math.max(...rs))];
+    $("cap-f5x").textContent = `With βM = ${sg(bM)} and βS = ${sg(bS)}, the metric's correlation with simplicity would range from ${sg(lo.rS)} on ${lo.name} ` +
+      `to ${sg(hi.rS)} on ${hi.name}, although nothing about the metric changes.` + (bad ? " The shaded values of ρ cannot occur with this fingerprint: no metric can explain more than all of the human signal." : "");
+  }
+  figure(renderF5x);
+
   (function () {
     const opts = [["", "none"], ...metricOrder(fpMetrics.map((d) => d.metric)).map((m) => [m, mName(m)]), [JS, "Judge, simplicity prompt"], [JM, "Judge, meaning prompt"]];
     select($("ctl-f4"), "Show benchmarks for", opts, s4.metric, (v) => { s4.metric = v; renderF4(); });
   })();
+  const REGIONS = [
+    { x: 1.03, y: 0.04, t: "meaning only", a: "end" }, { x: 0.22, y: 0.95, t: "simplicity only", a: "middle" },
+    { x: 1.03, y: 0.95, t: "both", a: "end" }, { x: -0.48, y: 0.95, t: "simpler by dropping content", a: "start" },
+    { x: 1.03, y: -0.46, t: "copies the source", a: "end" },
+  ];
   function renderF4() {
     groupLegend("leg-f4", [{ label: "Qwen3.8-27B judge (exploratory)", color: T.ink, kind: "diamond" }]);
     const node = $("c-f4"); const width = Math.min(widthOf(node, 640), 640);
@@ -297,6 +461,7 @@
       y: { domain: [-0.5, 1.0], label: "↑ βS, weight on simplicity", grid: true, tickFormat: (x) => f2(x, 1) },
       marks: [
         Plot.ruleX([0], { stroke: T.axis }), Plot.ruleY([0], { stroke: T.axis }),
+        ...["start", "middle", "end"].map((a) => Plot.text(REGIONS.filter((d) => d.a === a), { x: "x", y: "y", text: "t", textAnchor: a, fill: T.muted, fontStyle: "italic", fontSize: 11 })),
         Plot.ruleY(all, { clip: true, y: "bS", x1: (d) => d.bM - d.sdM, x2: (d) => d.bM + d.sdM, stroke: (d) => (d.g === "llm" ? T.ink : gColor(d.g)), strokeOpacity: sel ? 0.25 : 0.6 }),
         Plot.ruleX(all, { clip: true, x: "bM", y1: (d) => d.bS - d.sdS, y2: (d) => d.bS + d.sdS, stroke: (d) => (d.g === "llm" ? T.ink : gColor(d.g)), strokeOpacity: sel ? 0.25 : 0.6 }),
         Plot.dot(fpMetrics, { x: "bM", y: "bS", r: 5.5, fill: (d) => gColor(d.g), stroke: T.surface, strokeWidth: 2, fillOpacity: (d) => (sel && d !== sel ? 0.3 : 1), tip: true, title: tip }),
@@ -356,8 +521,8 @@
         Plot.text([tr.reduction], { y: (d) => d, x: 0.01, text: () => `achieved overall: ${pct(tr.reduction)}`, textAnchor: "start", dy: 12, fill: T.ink2 }),
         Plot.dot(rows, { x: "rho_distance", y: "gain", r: 5.5, fill: T.s1, stroke: T.surface, strokeWidth: 2, tip: true,
           title: (d) => `${d.name} held out (ρ = ${f2(d.rho)})\nerror: fingerprint ${f2(d.mae_fp, 3)} vs naive ${f2(d.mae_naive, 3)}\nreduction ${pct(d.gain)}` }),
-        Plot.text(rows.filter((d) => LBL6[d.held_out]), { x: "rho_distance", y: "gain", text: "name", dx: (d) => LBL6[d.held_out][0], dy: (d) => LBL6[d.held_out][1],
-          textAnchor: (d) => LBL6[d.held_out][2], fill: T.ink, fontSize: 11 }),
+        ...rows.filter((d) => LBL6[d.held_out]).map((d) => Plot.text([d], { x: "rho_distance", y: "gain", text: "name",
+          dx: LBL6[d.held_out][0], dy: LBL6[d.held_out][1], textAnchor: LBL6[d.held_out][2], fill: T.ink, fontSize: 11 })),
       ],
     }), dataView([...rows].sort(by("gain", -1)), [{ key: "name", label: "Held out" }, { key: "rho", label: "ρ", num: true, fmt: f2 }, { key: "rho_distance", label: "distance", num: true, fmt: f2 },
       { key: "mae_fp", label: "MAE fingerprint", num: true, fmt: (v) => f2(v, 3) }, { key: "mae_naive", label: "MAE naive", num: true, fmt: (v) => f2(v, 3) }, { key: "gain", label: "reduction", num: true, fmt: pct }]));

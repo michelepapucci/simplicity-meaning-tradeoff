@@ -185,3 +185,15 @@ footer { max-width: 720px; margin: 60px auto 0; font-family: var(--sans); font-s
 /* Figure 10 summary table: eight columns in the figure width */
 #t-f10 table { font-size: 13px; }
 #t-f10 th, #t-f10 td { padding: 5px 6px; }
+
+/* fingerprint explainer */
+.steps { font-family: var(--sans); font-size: 14px; line-height: 1.45; }
+.steps ol { padding-left: 20px; margin: 4px 0 6px; }
+.steps li { margin: 7px 0; }
+.steps .calc { display: block; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.steps .note { font-size: 12px; margin: 4px 0 0; }
+input[type="range"] { accent-color: var(--accent); width: 150px; }
+.slider-val { display: inline-block; min-width: 3.2em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.eq .small { font-family: var(--sans); font-size: 13px; color: var(--ink-2); }
+.two-col.wide-left { grid-template-columns: 1.2fr 1fr; }
+@media (max-width: 760px) { .two-col.wide-left { grid-template-columns: 1fr; } }
