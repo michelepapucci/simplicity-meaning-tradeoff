@@ -7,8 +7,14 @@
     return;
   }
   const E1 = D.exp1, E2 = D.exp2, E3 = D.exp3;
-  const JUDGE = E3.judge;
-  const JM = `llm_${JUDGE}_M`, JS = `llm_${JUDGE}_S`;
+  const JUDGES = E3.judges;                                    // [{key, name}]
+  const JNAME = Object.fromEntries(JUDGES.map((j) => [j.key, j.name]));
+  const JSYM = { qwen38_27b: "diamond", gptoss120b: "triangle" };
+  const JSHORT = { qwen38_27b: "Qwen", gptoss120b: "gpt-oss" };
+  const jSym = (k) => JSYM[k] || "diamond";
+  const jcol = (k, dim) => `llm_${k}_${dim}`;
+  const judgeOf = (m) => { const x = /^llm_(.+)_([MS])$/.exec(m); return x && JNAME[x[1]] ? { key: x[1], dim: x[2] } : null; };
+  const judgeLegend = (suffix = "") => JUDGES.map((j) => ({ label: `${j.name} judge${suffix}`, color: T.ink, kind: jSym(j.key) }));
 
   // ---------------------------------------------------------------- tokens, names, formatting
   let T = {};
@@ -24,7 +30,7 @@
   const GROUP_LABEL = { similarity: "Similarity to references / source", learned: "Learned metric", proxy: "Length / readability proxy" };
   const groupOf = (m) => D.names.group[m] || (String(m).startsWith("llm_") ? "llm" : "other");
   const gColor = (g) => ({ similarity: T.s1, learned: T.s2, proxy: T.s3 }[g] || T.ink);
-  const mName = (m) => (m === JM || m === JS ? "Qwen3.8-27B judge" : D.names.short[m] || D.names.metric[m] || m);
+  const mName = (m) => { const j = judgeOf(m); return j ? `${JNAME[j.key]} judge` : D.names.short[m] || D.names.metric[m] || m; };
   const bName = (b) => D.names.bench[b] || b;
   const minus = (s) => s.replace(/-/g, "−");
   // d must be a number: table cells call fmt(value, row), so a row object must not become the precision
@@ -65,6 +71,9 @@
       const sw = el("i", { class: it.kind === "ring" ? "ring" : it.kind || "" });
       if (it.kind === "ring") sw.style.borderColor = it.color; else sw.style.background = it.color;
       if (it.kind === "diamond") { sw.style.transform = "rotate(45deg)"; sw.style.borderRadius = "1px"; sw.style.width = "9px"; sw.style.height = "9px"; }
+      if (it.kind === "triangle") { sw.style.clipPath = "polygon(50% 0, 100% 100%, 0 100%)"; sw.style.borderRadius = "0"; sw.style.width = "12px"; sw.style.height = "11px"; }
+      if (it.kind === "square") { sw.style.borderRadius = "1px"; }
+      if (it.hollow) { sw.style.background = "transparent"; sw.style.border = `2px solid ${it.color}`; sw.style.width = "8px"; sw.style.height = "8px"; }
       return el("span", {}, sw, document.createTextNode(it.label));
     }));
   }
@@ -141,13 +150,14 @@
   document.querySelectorAll('[data-bind="commit"]').forEach((n) => (n.textContent = D.commit));
 
   function statusTiles() {
-    const p = E3.progress.gptoss120b.answered;
-    const gDone = Object.values(p).reduce((s, x) => s + x, 0);
-    const gTot = E3.progress.gptoss120b.total_pilot + E3.progress.gptoss120b.total_natural;
+    const prog = (k) => { const p = E3.progress[k]; return { done: Object.values(p.answered).reduce((s, x) => s + x, 0), tot: p.total_pilot + p.total_natural }; };
+    const P = JUDGES.map((j) => ({ ...j, ...prog(j.key) }));
+    const nDone = P.filter((p) => p.done >= p.tot).length;
     const tiles = [
       { label: "Experiment 1 · natural benchmarks", value: "Final", sub: "9 benchmarks, 19 metrics, pre-registered", frac: 1 },
       { label: "Experiment 2 · contrast set", value: "Pilot, 1 of 3 annotators", sub: "199 items rated; full set planned for Dec", frac: 1 / 3 },
-      { label: "Experiment 3 · LLM judges", value: "1 of 2 judges done", sub: `gpt-oss-120b: ${gDone.toLocaleString("en-US")} of ${gTot.toLocaleString("en-US")} calls`, frac: (1 + gDone / gTot) / 2 },
+      { label: "Experiment 3 · LLM judges", value: nDone === P.length ? "Both judges done" : `${nDone} of ${P.length} judges done`,
+        sub: "natural sample and contrast pilot; full contrast set planned", frac: P.reduce((s, p) => s + Math.min(1, p.done / p.tot), 0) / P.length },
     ];
     $("status-row").replaceChildren(...tiles.map((t) => {
       const m = el("div", { class: "meter", role: "img", "aria-label": `${Math.round(t.frac * 100)}% done` }, el("span"));
@@ -157,9 +167,10 @@
     }));
     const js = $("judge-status");
     js.replaceChildren(el("div", { class: "kicker", text: "Status" }));
-    js.append(el("ul", {},
-      el("li", { text: "Qwen3.8-27B (dense, Q8_0, thinking off): complete on the natural sample (23,976 calls) and the contrast pilot (796 calls), every call answered." }),
-      el("li", { text: `gpt-oss-120b (native MXFP4, low reasoning effort): running, ${gDone.toLocaleString("en-US")} of ${gTot.toLocaleString("en-US")} calls answered (contrast pilot first, then the natural sample).` })));
+    const how = { qwen38_27b: "dense, Q8_0, thinking off", gptoss120b: "mixture of experts, native MXFP4, low reasoning effort" };
+    js.append(el("ul", {}, ...P.map((p) => el("li", { text: p.done >= p.tot
+      ? `${p.name} (${how[p.key] || ""}): complete on the natural sample and the contrast pilot (${p.tot.toLocaleString("en-US")} calls), every call answered.`
+      : `${p.name} (${how[p.key] || ""}): running, ${p.done.toLocaleString("en-US")} of ${p.tot.toLocaleString("en-US")} calls answered.` }))));
   }
 
   // ---------------------------------------------------------------- Figure 1: rho forest
@@ -279,7 +290,11 @@
     }));
   }
   const fpMetrics = fpSummary(fpObs);
-  const fpJudge = fpSummary(E3.judge_fingerprints).map((d) => ({ ...d, name: d.metric === JS ? "Judge, simplicity prompt" : "Judge, meaning prompt", g: "llm" }));
+  const fpJudge = fpSummary(E3.judge_fingerprints).map((d) => {
+    const j = judgeOf(d.metric);
+    return { ...d, key: j.key, dim: j.dim, name: `${JNAME[j.key]}, ${j.dim === "S" ? "simplicity" : "meaning"} prompt`,
+      short: `${JSHORT[j.key] || JNAME[j.key]} (${j.dim})`, g: "llm" };
+  });
   // ---------------------------------------------------------------- Figure 4 (explainer): anatomy of a fingerprint
   const s4x = { metric: "bertscore", bench: "simpda" };
   (function () {
@@ -440,7 +455,7 @@
   figure(renderF5x);
 
   (function () {
-    const opts = [["", "none"], ...metricOrder(fpMetrics.map((d) => d.metric)).map((m) => [m, mName(m)]), [JS, "Judge, simplicity prompt"], [JM, "Judge, meaning prompt"]];
+    const opts = [["", "none"], ...metricOrder(fpMetrics.map((d) => d.metric)).map((m) => [m, mName(m)]), ...fpJudge.map((d) => [d.metric, d.name])];
     select($("ctl-f4"), "Show benchmarks for", opts, s4.metric, (v) => { s4.metric = v; renderF4(); });
   })();
   const REGIONS = [
@@ -449,7 +464,7 @@
     { x: 1.03, y: -0.46, t: "copies the source", a: "end" },
   ];
   function renderF4() {
-    groupLegend("leg-f4", [{ label: "Qwen3.8-27B judge (exploratory)", color: T.ink, kind: "diamond" }]);
+    groupLegend("leg-f4", judgeLegend(" (exploratory)"));
     const node = $("c-f4"); const width = Math.min(widthOf(node, 640), 640);
     const sel = [...fpMetrics, ...fpJudge].find((d) => d.metric === s4.metric);
     const selPts = sel ? sel.rows.map((r) => ({ ...r, bench: bName(r.resource) })) : [];
@@ -465,8 +480,8 @@
         Plot.ruleY(all, { clip: true, y: "bS", x1: (d) => d.bM - d.sdM, x2: (d) => d.bM + d.sdM, stroke: (d) => (d.g === "llm" ? T.ink : gColor(d.g)), strokeOpacity: sel ? 0.25 : 0.6 }),
         Plot.ruleX(all, { clip: true, x: "bM", y1: (d) => d.bS - d.sdS, y2: (d) => d.bS + d.sdS, stroke: (d) => (d.g === "llm" ? T.ink : gColor(d.g)), strokeOpacity: sel ? 0.25 : 0.6 }),
         Plot.dot(fpMetrics, { x: "bM", y: "bS", r: 5.5, fill: (d) => gColor(d.g), stroke: T.surface, strokeWidth: 2, fillOpacity: (d) => (sel && d !== sel ? 0.3 : 1), tip: true, title: tip }),
-        Plot.dot(fpJudge, { x: "bM", y: "bS", r: 7, symbol: "diamond", fill: T.ink, stroke: T.surface, strokeWidth: 2, fillOpacity: (d) => (sel && d !== sel ? 0.3 : 1), tip: true, title: tip }),
-        Plot.text(fpJudge, { x: "bM", y: "bS", text: (d) => (d.metric === JS ? "judge (S)" : "judge (M)"), dx: 10, textAnchor: "start", fill: T.ink, fontWeight: 600 }),
+        ...JUDGES.map((j) => Plot.dot(fpJudge.filter((d) => d.key === j.key), { x: "bM", y: "bS", r: 7, symbol: jSym(j.key), fill: T.ink, stroke: T.surface, strokeWidth: 2, fillOpacity: (d) => (sel && d !== sel ? 0.3 : 1), tip: true, title: tip })),
+        ...JUDGES.map((j, i) => Plot.text(fpJudge.filter((d) => d.key === j.key), { x: "bM", y: "bS", text: "short", dx: i ? -10 : 10, textAnchor: i ? "end" : "start", fill: T.ink, stroke: T.surface, strokeWidth: 4, fontWeight: 600, fontSize: 11 })),
         Plot.dot(selPts, { x: "beta_M", y: "beta_S", r: 4.5, stroke: sel ? (sel.g === "llm" ? T.ink : gColor(sel.g)) : T.ink, strokeWidth: 2, fill: T.surface, tip: true,
           title: (d) => `${sel ? sel.name : ""} on ${d.bench}\nβM = ${f2(d.beta_M)}, βS = ${f2(d.beta_S)}` }),
         Plot.text(selPts, { x: "beta_M", y: "beta_S", text: "bench", dy: -10, fill: T.ink2, fontSize: 11 }),
@@ -623,7 +638,7 @@
 
   // ---------------------------------------------------------------- Figure 9: natural vs contrast
   figure(() => {
-    groupLegend("leg-f9", [{ label: "mean over natural benchmarks", color: T.muted, kind: "ring" }, { label: "Qwen3.8-27B judge", color: T.ink, kind: "diamond" }]);
+    groupLegend("leg-f9", [{ label: "mean over natural benchmarks", color: T.muted, kind: "ring" }, ...judgeLegend()]);
     const mb = E2.metric_behaviour.filter((r) => !String(r.metric).startsWith("llm_"));
     const PM = "Correlation with human meaning", PS = "Correlation with human simplicity";
     const long = [];
@@ -631,13 +646,15 @@
       long.push({ name: mName(r.metric), g: groupOf(r.metric), panel: PM, nat: r.r_M_natural, con: r.r_M, lo: r.r_M_lo, hi: r.r_M_hi });
       long.push({ name: mName(r.metric), g: groupOf(r.metric), panel: PS, nat: r.r_S_natural, con: r.r_S_contrast, lo: r.r_S_lo, hi: r.r_S_hi });
     }
-    const cmp = E3.compare_all;
+    const cmp = E3.compare_all.filter((r) => r.is_judge);
     const jnat = (dim, meas) => mean(cmp.filter((r) => r.dim === dim && r.measure === meas && r.data !== "contrast_pilot").map((r) => r.r));
     const jcon = (dim, meas) => (cmp.find((r) => r.dim === dim && r.measure === meas && r.data === "contrast_pilot") || {}).r;
-    const J = "Qwen3.8-27B judge";
-    long.push({ name: J, g: "llm", panel: PM, nat: jnat("M", JM), con: jcon("M", JM) });
-    long.push({ name: J, g: "llm", panel: PS, nat: jnat("S", JS), con: jcon("S", JS) });
-    const order = [J, ...metricOrder(mb.map((r) => r.metric)).map(mName)];
+    for (const j of JUDGES) {
+      const J = `${j.name} judge`;
+      long.push({ name: J, g: "llm", key: j.key, panel: PM, nat: jnat("M", jcol(j.key, "M")), con: jcon("M", jcol(j.key, "M")) });
+      long.push({ name: J, g: "llm", key: j.key, panel: PS, nat: jnat("S", jcol(j.key, "S")), con: jcon("S", jcol(j.key, "S")) });
+    }
+    const order = [...JUDGES.map((j) => `${j.name} judge`), ...metricOrder(mb.map((r) => r.metric)).map(mName)];
     const node = $("c-f9"); const width = widthOf(node);
     const narrow = width < 560;
     const fk = narrow ? "fy" : "fx";
@@ -655,29 +672,31 @@
         Plot.dot(long, { x: "nat", y: "name", [fk]: "panel", r: 4.5, stroke: T.muted, strokeWidth: 1.5, fill: T.surface }),
         Plot.dot(long.filter((d) => d.g !== "llm"), { x: "con", y: "name", [fk]: "panel", r: 5.5, fill: col, stroke: T.surface, strokeWidth: 2, tip: true,
           title: (d) => `${d.name}: ${d.panel.toLowerCase()}\nnatural benchmarks (mean) ${f2(d.nat)} → contrast set ${f2(d.con)}` + (d.lo != null ? ` ${ci(d.lo, d.hi)}` : "") }),
-        Plot.dot(long.filter((d) => d.g === "llm"), { x: "con", y: "name", [fk]: "panel", r: 7, symbol: "diamond", fill: T.ink, stroke: T.surface, strokeWidth: 2, tip: true,
-          title: (d) => `${d.name}: ${d.panel.toLowerCase()}\nnatural benchmarks (mean) ${f2(d.nat)} → contrast set ${f2(d.con)}` }),
+        ...JUDGES.map((j) => Plot.dot(long.filter((d) => d.key === j.key), { x: "con", y: "name", [fk]: "panel", r: 7, symbol: jSym(j.key), fill: T.ink, stroke: T.surface, strokeWidth: 2, tip: true,
+          title: (d) => `${d.name}: ${d.panel.toLowerCase()}\nnatural benchmarks (mean) ${f2(d.nat)} → contrast set ${f2(d.con)}` })),
       ],
     }), dataView(long, [{ key: "name", label: "Measure" }, { key: "panel", label: "" }, { key: "nat", label: "natural (mean)", num: true, fmt: f2 }, { key: "con", label: "contrast", num: true, fmt: f2 }]));
   });
 
   // ---------------------------------------------------------------- Figure 10: judge vs metrics
-  const s10 = { data: "contrast_pilot", dim: "M" };
+  const s10 = { data: "contrast_pilot", dim: "M", judge: JUDGES[0].key };
   (function () {
     const datas = [...new Set(E3.compare_summary.map((r) => r.data))];
     const opts = [["contrast_pilot", "Contrast set (pilot)"], ...datas.filter((d) => d !== "contrast_pilot").map((d) => [d, bName(d)])];
+    seg($("ctl-f10"), "Judge", JUDGES.map((j) => [j.key, j.name]), s10.judge, (v) => { s10.judge = v; renderF10(); });
     select($("ctl-f10"), "Data", opts, s10.data, (v) => { s10.data = v; renderF10(); });
     seg($("ctl-f10"), "Human rating", [["M", "Meaning"], ["S", "Simplicity"]], s10.dim, (v) => { s10.dim = v; renderF10(); });
   })();
   function renderF10() {
-    groupLegend("leg-f10", [{ label: "Qwen3.8-27B judge", color: T.ink, kind: "diamond" }]);
-    const rows = E3.compare_all.filter((r) => r.data === s10.data && r.dim === s10.dim).map((r) => ({
+    const J = JNAME[s10.judge];
+    groupLegend("leg-f10", [{ label: `${J} judge`, color: T.ink, kind: jSym(s10.judge) }]);
+    const rows = E3.compare_all.filter((r) => r.judge === s10.judge && r.data === s10.data && r.dim === s10.dim).map((r) => ({
       ...r, name: (r.sign < 0 ? "−" : "") + mName(r.measure), g: r.is_judge ? "llm" : groupOf(r.measure),
       verdict: r.is_judge ? "judge" : r.delta_lo > 0 ? "better" : r.delta_hi < 0 ? "worse" : "tie",
     })).sort(by("r_oriented", -1));
     const node = $("c-f10"); const width = Math.min(widthOf(node, 760), 760);
     const metr = rows.filter((r) => !r.is_judge), jr = rows.filter((r) => r.is_judge);
-    const tip = (d) => d.is_judge ? `Qwen3.8-27B judge\nr = ${f2(d.r)} (rank ${d.rank} of ${rows.length})`
+    const tip = (d) => d.is_judge ? `${J} judge\nr = ${f2(d.r)} (rank ${d.rank} of ${rows.length})`
       : `${d.name}\nr = ${f2(d.r_oriented)} (rank ${d.rank})\njudge − metric = ${sg(d.delta)} ${ci(d.delta_lo, d.delta_hi)}\n` +
         (d.verdict === "better" ? "judge significantly better" : d.verdict === "worse" ? "judge significantly worse" : "not distinguishable");
     put("c-f10", plot({
@@ -690,38 +709,103 @@
         Plot.dot(metr.filter((d) => d.verdict === "better"), { x: "r_oriented", y: "name", r: 5.5, fill: (d) => gColor(d.g), stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
         Plot.dot(metr.filter((d) => d.verdict === "tie"), { x: "r_oriented", y: "name", r: 5, stroke: (d) => gColor(d.g), strokeWidth: 2, fill: T.surface, tip: true, title: tip }),
         Plot.dot(metr.filter((d) => d.verdict === "worse"), { x: "r_oriented", y: "name", r: 6, symbol: "square", fill: (d) => gColor(d.g), stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
-        Plot.dot(jr, { x: "r_oriented", y: "name", r: 8, symbol: "diamond", fill: T.ink, stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
+        Plot.dot(jr, { x: "r_oriented", y: "name", r: 8, symbol: jSym(s10.judge), fill: T.ink, stroke: T.surface, strokeWidth: 2, tip: true, title: tip }),
         Plot.text(jr, { x: "r_oriented", y: "name", text: (d) => f2(d.r_oriented), dx: 12, textAnchor: "start", fill: T.ink, fontWeight: 700 }),
       ],
     }));
-    // summary table over all data
-    const S = E3.compare_summary.map((r) => ({ ...r, dname: bName(r.data), _hl: r.data === s10.data && r.dim === s10.dim }));
+    // summary table: both judges against the best metric, every data set
     const order = ["contrast_pilot", ...benches];
-    S.sort((a, b) => order.indexOf(a.data) - order.indexOf(b.data) || a.dim.localeCompare(b.dim));
-    const verdict = (r) => r.delta_best_lo > 0 ? badgeText("pass", "judge") : r.delta_best_hi < 0 ? badgeText("fail", "metric") : badgeText("info", "tie");
+    const keys = [...new Set(E3.compare_summary.map((r) => `${r.data}|${r.dim}`))];
+    const S = keys.map((k) => {
+      const [data, dim] = k.split("|");
+      const row = { data, dim, dname: bName(data), _hl: data === s10.data && dim === s10.dim };
+      for (const j of JUDGES) {
+        const r = E3.compare_summary.find((x) => x.judge === j.key && x.data === data && x.dim === dim);
+        if (!r) continue;
+        row.best_metric = r.best_metric; row.r_best = r.r_best; row[j.key] = r;
+      }
+      return row;
+    }).sort((a, b) => order.indexOf(a.data) - order.indexOf(b.data) || a.dim.localeCompare(b.dim));
+    const cell = (k) => (v, row) => {
+      const r = row[k]; if (!r) return "–";
+      const cls = r.delta_best_lo > 0 ? "pass" : r.delta_best_hi < 0 ? "fail" : "info";
+      return el("span", {}, document.createTextNode(`${f2(r.r_judge)} (${r.rank}) `),
+        el("span", { class: `badge ${cls}`, text: sg(r.delta_best), title: `judge − best metric ${ci(r.delta_best_lo, r.delta_best_hi)}` }));
+    };
     $("t-f10").replaceChildren(table(S, [
       { key: "dname", label: "Data" }, { key: "dim", label: "Rating", fmt: (v) => (v === "M" ? "meaning" : "simplicity") },
-      { key: "r_judge", label: "judge r", num: true, fmt: f2 }, { key: "rank", label: "rank", num: true, fmt: (v, r) => `${v} / ${r.n_measures}` },
       { key: "best_metric", label: "best metric", fmt: (v) => (v.startsWith("-") ? "−" + mName(v.slice(1)) : mName(v)) },
       { key: "r_best", label: "its r", num: true, fmt: f2 },
-      { key: "delta_best", label: "judge − best [95% CI]", num: true, fmt: (v, r) => `${sg(v)} ${ci(r.delta_best_lo, r.delta_best_hi)}` },
-      { key: "x", label: "better", fmt: (v, r) => verdict(r) },
+      ...JUDGES.map((j) => ({ key: `_${j.key}`, label: j.name, num: true, fmt: cell(j.key) })),
     ]));
+    $("t-f10").append(el("p", { class: "note", text: "Per judge: its r (rank among all measures) and judge − best metric; green = judge significantly better, red = significantly worse, grey = not distinguishable (hover for the 95% CI)." }));
   }
   function badgeText(cls, text) { return el("span", { class: `badge ${cls}`, text }); }
   figure(renderF10);
 
+  // ---------------------------------------------------------------- Figure 13: two judges, two ways of scoring
+  const s12 = { dim: "S" };
+  seg($("ctl-f12"), "Human rating", [["M", "Meaning"], ["S", "Simplicity"]], s12.dim, (v) => { s12.dim = v; renderF12(); });
+  function renderF12() {
+    const [A, B] = JUDGES;
+    const SER = [
+      { id: "a_exp", label: `${A.name}, expected score`, color: T.ink, symbol: jSym(A.key), fill: true },
+      { id: "a_dig", label: `${A.name}, answered digit only`, color: T.ink, symbol: jSym(A.key), fill: false },
+      { id: "b_dig", label: `${B.name}, answered digit (= its expected score)`, color: T.ink, symbol: jSym(B.key), fill: true },
+    ];
+    legend("leg-f12", SER.map((s) => ({ label: s.label, color: s.color, kind: s.symbol, hollow: !s.fill })));
+    const res = E3.resolution.filter((r) => r.dim === s12.dim);
+    const rows = [];
+    for (const b of benches) {
+      const a = res.find((r) => r.judge === A.key && r.data === b), g = res.find((r) => r.judge === B.key && r.data === b);
+      const pr = E3.judge_pair.find((r) => r.data === b && r.dim === s12.dim);
+      if (!a || !g) continue;
+      rows.push({ bench: b, name: bName(b), a_exp: a.r_expected, a_dig: a.r_digit, b_dig: g.r_expected, a_k: a.distinct_scores, b_k: g.distinct_scores, pr });
+    }
+    rows.sort(by("a_exp", -1));
+    const avg = { name: "Mean of the nine", a_exp: mean(rows.map((r) => r.a_exp)), a_dig: mean(rows.map((r) => r.a_dig)), b_dig: mean(rows.map((r) => r.b_dig)) };
+    const all = [avg, ...rows];
+    const pts = all.flatMap((r) => SER.map((s) => ({ ...s, name: r.name, x: r[s.id], row: r })));
+    const node = $("c-f12"); const width = Math.min(widthOf(node, 720), 720);
+    const tip = (d) => `${d.label} on ${d.name}\nr = ${f2(d.x)}` + (d.row.pr && d.id === "b_dig" ? `\n${B.name} − ${A.name} (expected) = ${sg(d.row.pr.delta)} ${ci(d.row.pr.lo, d.row.pr.hi)}` : "") +
+      (d.row.a_k && d.id !== "b_dig" ? `\n${A.name}: ${d.row.a_k} distinct expected scores` : d.row.b_k ? `\n${B.name}: ${d.row.b_k} distinct scores` : "");
+    put("c-f12", plot({
+      width, height: 34 * all.length + 50, marginLeft: Math.min(170, width * 0.34), marginRight: 16,
+      x: { domain: [0.2, 1], label: `r with human ${s12.dim === "M" ? "meaning" : "simplicity"} →`, grid: true, tickFormat: (x) => f2(x, 1) },
+      y: { domain: all.map((r) => r.name), label: null },
+      marks: [
+        Plot.ruleY(all, { y: "name", x1: (r) => Math.min(r.a_exp, r.a_dig, r.b_dig), x2: (r) => Math.max(r.a_exp, r.a_dig, r.b_dig), stroke: T.grid, strokeWidth: 2 }),
+        ...SER.map((s, i) => Plot.dot(pts.filter((p) => p.id === s.id), { x: "x", y: "name", dy: (i - 1) * 7, r: s.symbol === "triangle" ? 6.5 : 6, symbol: s.symbol,
+          fill: s.fill ? s.color : T.surface, stroke: s.fill ? T.surface : s.color, strokeWidth: s.fill ? 1.5 : 2, tip: true, title: tip })),
+      ],
+    }), dataView(all.map((r) => ({ name: r.name, a_exp: r.a_exp, a_dig: r.a_dig, b_dig: r.b_dig, d: r.pr ? r.pr.delta : null, lo: r.pr ? r.pr.lo : null, hi: r.pr ? r.pr.hi : null })), [
+      { key: "name", label: "Benchmark" }, { key: "a_exp", label: `${A.name} expected`, num: true, fmt: f2 }, { key: "a_dig", label: `${A.name} digit`, num: true, fmt: f2 },
+      { key: "b_dig", label: B.name, num: true, fmt: f2 }, { key: "d", label: `${B.name} − ${A.name} [95% CI]`, num: true, fmt: (v, r) => (v == null ? "–" : `${sg(v)} ${ci(r.lo, r.hi)}`) }]));
+    const pc = E3.judge_pair.find((r) => r.data === "contrast_pilot" && r.dim === s12.dim);
+    $("cap-f12").textContent = `Mean over the nine benchmarks: ${A.name} ${f2(avg.a_exp)} with its expected score, ${f2(avg.a_dig)} with the answered digit alone; ${B.name} ${f2(avg.b_dig)}.` +
+      (pc ? ` Contrast pilot: ${A.name} ${f2(pc.r_a)}, ${B.name} ${f2(pc.r_b)} (difference ${sg(pc.delta)} ${ci(pc.lo, pc.hi)}).` : "");
+  }
+  figure(renderF12);
+
   // ---------------------------------------------------------------- Figure 11: H7 length bias
   figure(() => {
+    const DES = "contrast_design";
+    const des = (m) => E3.h7_design.filter((r) => r.measure === m).map((r) => ({ ...r, data: DES }));
     const SER = [
-      { key: JUDGE, label: "Qwen3.8-27B judge", color: T.ink, symbol: "diamond", rows: E3.h7, dy: -7 },
-      { key: "fkgl", label: "FKGL gain", color: T.s3, symbol: "circle", rows: E3.h7_reference.filter((r) => r.judge === "fkgl"), dy: 0 },
-      { key: "simple_l", label: "SIMPLE-large", color: T.s2, symbol: "circle", rows: E3.h7_reference.filter((r) => r.judge === "simple_l"), dy: 7 },
+      ...JUDGES.map((j) => ({ key: j.key, label: `${j.name} judge`, color: T.ink, symbol: jSym(j.key),
+        rows: [...E3.h7.filter((r) => r.judge === j.key), ...des(jcol(j.key, "S"))] })),
+      { key: "fkgl", label: "FKGL gain", color: T.s3, symbol: "circle", rows: [...E3.h7_reference.filter((r) => r.judge === "fkgl"), ...des("fkgl")] },
+      { key: "simple_l", label: "SIMPLE-large", color: T.s2, symbol: "circle", rows: [...E3.h7_reference.filter((r) => r.judge === "simple_l"), ...des("simple_l")] },
+      { key: "human", label: "Human annotator (design view only)", color: T.ink2, symbol: "square", rows: des("S") },
     ];
-    legend("leg-f11", SER.map((s) => ({ label: s.label, color: s.color, kind: s.symbol === "diamond" ? "diamond" : "" })));
-    const datas = ["contrast_pilot", ...[...E3.h7].filter((r) => r.data !== "contrast_pilot").sort(by("partial_r", 1)).map((r) => r.data)];
+    SER.forEach((s, i) => (s.dy = Math.round((i - (SER.length - 1) / 2) * 6)));
+    legend("leg-f11", SER.map((s) => ({ label: s.label, color: s.color, kind: s.symbol === "circle" ? "" : s.symbol })));
+    const J0 = JUDGES[0].key;
+    const nat = [...E3.h7].filter((r) => r.judge === J0 && r.data !== "contrast_pilot").sort(by("partial_r", 1)).map((r) => r.data);
+    const datas = [DES, "contrast_pilot", ...nat];
+    const lab = (d) => (d === DES ? "Contrast pilot, given the design" : d === "contrast_pilot" ? "Contrast pilot, given the ratings" : bName(d));
     const node = $("c-f11"); const width = Math.min(widthOf(node, 760), 760);
-    const rows = SER.flatMap((s) => s.rows.map((r) => ({ ...r, series: s.label, color: s.color, symbol: s.symbol, dy: s.dy, name: bName(r.data) })));
+    const rows = SER.flatMap((s) => s.rows.map((r) => ({ ...r, series: s.label, color: s.color, symbol: s.symbol, dy: s.dy, name: lab(r.data) })));
     const marks = [
       Plot.rectX([0], { x1: -0.15, x2: 0.15, fill: T.wash }),
       Plot.ruleX([0], { stroke: T.axis }),
@@ -729,13 +813,13 @@
     for (const s of SER) {
       const rr = rows.filter((r) => r.series === s.label);
       marks.push(Plot.ruleY(rr, { y: "name", x1: "ci_lo", x2: "ci_hi", stroke: s.color, strokeWidth: 1.5, dy: s.dy, strokeOpacity: 0.7 }));
-      marks.push(Plot.dot(rr, { x: "partial_r", y: "name", dy: s.dy, r: s.symbol === "diamond" ? 6.5 : 4.5, symbol: s.symbol, fill: s.color, stroke: T.surface, strokeWidth: 1.5, tip: true,
-        title: (d) => `${d.series} on ${d.name}\npartial r = ${f2(d.partial_r)} ${ci(d.ci_lo, d.ci_hi)}\nraw r with length ${f2(d.r_raw)}, n = ${d.n.toLocaleString("en-US")}` }));
+      marks.push(Plot.dot(rr, { x: "partial_r", y: "name", dy: s.dy, r: s.symbol === "circle" ? 4.5 : 6, symbol: s.symbol, fill: s.color, stroke: T.surface, strokeWidth: 1.5, tip: true,
+        title: (d) => `${d.series} on ${d.name}\npartial r = ${f2(d.partial_r)} ${ci(d.ci_lo, d.ci_hi)}\n` + (d.r_raw != null ? `raw r with length ${f2(d.r_raw)}, ` : "") + `n = ${d.n.toLocaleString("en-US")}` }));
     }
     put("c-f11", plot({
-      width, height: 40 * datas.length + 50, marginLeft: Math.min(170, width * 0.34), marginRight: 16,
-      x: { domain: [-0.7, 0.45], label: "partial r(simplicity score, length | human M, S) →", grid: true, tickFormat: (x) => sg(x, 1) },
-      y: { domain: datas.map(bName), label: null },
+      width, height: 46 * datas.length + 50, marginLeft: Math.min(200, width * 0.36), marginRight: 16,
+      x: { domain: [-0.75, Math.min(1, Math.max(0.45, d3.max(rows, (d) => d.ci_hi) + 0.03))], label: width < 560 ? "partial r with length →" : "partial r(simplicity score, length | meaning, simplicity) →", grid: true, tickFormat: (x) => sg(x, 1) },
+      y: { domain: datas.map(lab), label: null },
       marks,
     }), dataView(rows, [{ key: "series", label: "Measure" }, { key: "name", label: "Data" }, { key: "partial_r", label: "partial r", num: true, fmt: f2 },
       { key: "ci_lo", label: "95% CI", num: true, fmt: (v, r) => ci(r.ci_lo, r.ci_hi) }, { key: "n", label: "n", num: true }]));
@@ -752,7 +836,7 @@
     const out = [];
     for (const [title, cs] of groups) {
       out.push(el("h4", { text: title }));
-      out.push(table(cs.map((c) => ({ ...c, value: c.value.replace(/qwen38_27b/g, "Qwen3.8-27B") })), [
+      out.push(table(cs.map((c) => ({ ...c, value: JUDGES.reduce((v, j) => v.split(j.key).join(j.name), c.value) })), [
         { key: "hyp", label: "" }, { key: "name", label: "Check" }, { key: "value", label: "Value" }, { key: "criterion", label: "Criterion" },
         { key: "status", label: "Status", fmt: (v) => badge(v) },
       ]));

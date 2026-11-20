@@ -197,3 +197,5 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
 .eq .small { font-family: var(--sans); font-size: 13px; color: var(--ink-2); }
 .two-col.wide-left { grid-template-columns: 1.2fr 1fr; }
 @media (max-width: 760px) { .two-col.wide-left { grid-template-columns: 1fr; } }
+#t-f10 td.num { white-space: nowrap; }
+#t-f10 .badge { padding: 0 6px; }

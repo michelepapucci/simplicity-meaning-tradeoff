@@ -32,7 +32,7 @@
 <div class="banner" role="note">
   <b>How to read this draft.</b> Experiment 1 (nine public benchmarks) is final and pre-registered.
   The contrast set is a <b>pilot rated by one annotator</b>: exploratory, and it will change when the three-annotator full set is in.
-  LLM judges: one of two judges is complete. Every figure is computed from the project's result files;
+  LLM judges: both judges are complete on the natural sample and the contrast pilot. Every figure is computed from the project's result files;
   hover or tap marks for values, and open "Data" under a figure for the table.
   <span class="badge plan">Planned</span> boxes say what is still to be done; <span class="badge info">Proposal</span> boxes are suggestions not yet adopted.
 </div>
@@ -47,8 +47,9 @@ simplicity once their correlation is removed. Fingerprints are stable for most m
 benchmarks than raw correlations (Kendall τ gain 0.28). On natural data, simplicity is also entangled with output length, to a degree
 that differs from benchmark to benchmark. A factorial contrast set, in which meaning, simplicity and length vary independently, pulls the
 two apart: in a pilot, readability formulas and learned simplicity metrics track simplicity more cleanly than on any natural benchmark,
-length ratios carry none of the designed simplicity, and only two metrics track meaning at all. An open LLM judge (Qwen3.8-27B) is the best meaning measure on eight of nine benchmarks and on the
-contrast set, is on par with the best metric for simplicity, and rewards shorter outputs more than human raters do.</p>
+length ratios carry none of the designed simplicity, and only two metrics track meaning at all. Two open LLM judges (Qwen3.8-27B and gpt-oss-120b) are the best meaning measures on most benchmarks and on the
+contrast set, are on par with the best metric for simplicity, and reward shorter outputs more than human raters do; the larger judge is
+not the better one, partly because of how its answers can be scored.</p>
 
 <h2 id="intro"><span class="num">1</span>Introduction</h2>
 <p>A simplification metric is usually trusted because its scores correlate with human ratings. Most benchmarks rate two things,
@@ -321,7 +322,7 @@ average on the natural benchmarks.</p>
   <div class="fig-sub">Correlation with human meaning (left) and simplicity (right): mean over the natural benchmarks (ring) → contrast-set pilot (dot).</div>
   <div class="legend" id="leg-f9"></div>
   <div class="chart" id="c-f9"></div>
-  <figcaption>The judge row uses its meaning prompt on the left and its simplicity prompt on the right (§6). Reference-based metrics (LENS, BLEU, SARI, BERTScore against references) cannot run here: contrast items have no references.</figcaption>
+  <figcaption>The judge rows use their meaning prompt on the left and their simplicity prompt on the right (§6). Reference-based metrics (LENS, BLEU, SARI, BERTScore against references) cannot run here: contrast items have no references.</figcaption>
 </figure>
 
 <p class="finding">Readability formulas and learned simplicity metrics correlate 0.62–0.74 with human simplicity, far above their natural-data
@@ -336,17 +337,18 @@ readability formulas do <em>not</em> collapse (consistent with §4), and the lea
 values. Both need confirming on the full set.</p>
 
 <h2 id="judges"><span class="num">6</span>LLM judges</h2>
-<p>We prompt open-weight LLMs with the annotators' own definitions and scales, one prompt per dimension, temperature 0, and take the expected
-rating over the digit probabilities (G-Eval). Judges come from families other than the generators. The natural sample is at most 2,000 items per
+<p>We prompt two open-weight LLMs, Qwen3.8-27B (dense, answers directly) and gpt-oss-120b (mixture of experts, reasons before answering), with
+the annotators' own definitions and scales, one prompt per dimension, temperature 0, and take the expected rating over the digit probabilities
+(G-Eval). Judges come from families other than the generators. The natural sample is at most 2,000 items per
 benchmark, drawn by whole sources (5,994 items).</p>
 <div class="callout plan" id="judge-status"><div class="kicker">Status</div></div>
 
 <h3><span class="num">6.1</span>How do judges compare with the metrics?</h3>
-<p>Figure 12 ranks the judge among all non-judge metrics on each benchmark and on the contrast set. A metric enters in its useful direction
+<p>Figure 12 ranks each judge among all non-judge metrics on each benchmark and on the contrast set. A metric enters in its useful direction
 (e.g. "−BLEU (src)" for simplicity), and the best metric is chosen per benchmark after the fact, which favours the metrics.</p>
 
 <figure class="fig" id="f10">
-  <div class="fig-title">Figure 12. The judge against every metric</div>
+  <div class="fig-title">Figure 12. Each judge against every metric</div>
   <div class="fig-sub">Correlation with the human rating, all measures on the same items. Filled = judge significantly better (paired cluster bootstrap, 95% CI of the difference above 0); ring = not distinguishable; square = judge significantly worse.</div>
   <div class="controls" id="ctl-f10"></div>
   <div class="legend" id="leg-f10"></div>
@@ -354,46 +356,77 @@ benchmark, drawn by whole sources (5,994 items).</p>
   <div class="tbl-wrap" id="t-f10"></div>
 </figure>
 
-<p class="finding">For meaning, the judge is the best or tied-best measure on 8 of 9 benchmarks, significantly better than the best metric on 5,
-and far ahead on the contrast set (0.77 against MeaningBERT's 0.51). For simplicity, it is never first on natural data but is within noise of the
-best metric on most benchmarks, and first on the contrast set by a small margin (0.78 against SIMPLE-large's 0.74).</p>
-<p>Two readings follow. The judge solves the meaning side, where the contrast set shows metrics to be weakest. On the simplicity side, a
-27B judge is roughly as good as the best metric, but which metric is best changes from benchmark to benchmark (LENS, SIMPLE, BLEU against
-the source, compression ratio), while the judge is near the top everywhere: averaged over the nine benchmarks it scores 0.59 against 0.56 for the
-best single metric.</p>
+<p class="finding">For meaning, both judges are the best or near-best measure: Qwen3.8-27B is first or tied with the best metric on 8 of 9
+benchmarks and significantly better on 5; gpt-oss-120b on 7 and 3. On the contrast set both are far ahead (0.77 and 0.70 against
+MeaningBERT's 0.51). For simplicity, neither judge beats the best metric on any natural benchmark: both are within noise on most and below it
+on QATS 2016 and Structural Simplicity (gpt-oss also on Wu &amp; Arase). On the contrast set both come first, by a margin that is significant
+only for Qwen (0.78 and 0.76 against SIMPLE-large's 0.74).</p>
+<p>Two readings follow. The judges solve the meaning side, where the contrast set shows metrics to be weakest. On the simplicity side, a
+judge is roughly as good as the best metric, but which metric is best changes from benchmark to benchmark (LENS, SIMPLE, BLEU against
+the source, compression ratio), while the judges are near the top everywhere: averaged over the nine benchmarks they score 0.59 (Qwen) and
+0.57 (gpt-oss) against 0.56 for the best single metric.</p>
 
-<h3><span class="num">6.2</span>Do judges reward shorter outputs?</h3>
-<p>We test whether the judge's simplicity score depends on length beyond what the human ratings explain: partial r(judge S, L | human M, human S).
-For comparison we run the same test on two metrics.</p>
+<h3><span class="num">6.2</span>Is the larger judge better?</h3>
+<p>No. gpt-oss-120b has four times the parameters of Qwen3.8-27B, but on meaning it is significantly lower on six of the ten data sets
+(paired cluster bootstrap; mean over the nine benchmarks 0.71 against 0.77), and on simplicity the two cannot be told apart anywhere except
+QATS 2016, where gpt-oss is lower. Figure 13 shows one reason. Qwen answers directly, so its probabilities over the five digits give a graded
+score, with hundreds of distinct values per benchmark. gpt-oss reasons first and then commits to one digit with probability ≈ 1, so its
+score takes only five to eight values on most benchmarks. Scored by its answered digit alone, Qwen drops from 0.59 to 0.51 on simplicity,
+below gpt-oss (0.57), and from 0.77 to 0.74 on meaning.</p>
 
-<figure class="fig" id="f11">
-  <div class="fig-title">Figure 13. The judge treats shorter as simpler, beyond the humans</div>
-  <div class="fig-sub">Partial correlation of each measure's simplicity score with length (compression ratio), controlling for human meaning and simplicity, with 95% cluster-bootstrap CI. Shaded band: |r| &lt; 0.15, the pre-registered bias threshold.</div>
-  <div class="legend" id="leg-f11"></div>
-  <div class="chart" id="c-f11"></div>
-  <figcaption>Negative = longer outputs get lower simplicity scores than the human ratings warrant. Natural benchmarks: final for this judge. Contrast set: pilot, one annotator.</figcaption>
+<figure class="fig" id="f12">
+  <div class="fig-title">Figure 13. How a judge is scored matters as much as which judge</div>
+  <div class="fig-sub">Correlation with the human rating per benchmark: Qwen3.8-27B with its expected score (filled) and with its answered digit
+  alone (ring), and gpt-oss-120b, whose expected score is its answered digit. Hover a gpt-oss point for the paired difference with Qwen.</div>
+  <div class="controls" id="ctl-f12"></div>
+  <div class="legend" id="leg-f12"></div>
+  <div class="chart" id="c-f12"></div>
+  <figcaption id="cap-f12"></figcaption>
 </figure>
 
-<p class="finding">The pre-registered bias finding (|partial r| ≥ 0.15 with the CI excluding 0, for at least one judge) holds on natural data:
-−0.53 on Wu &amp; Arase, −0.44 on QATS 2016 and −0.30 on Scialom (human). On the contrast-set pilot it is −0.38.</p>
-<p>This is not the familiar verbosity bias of pairwise preference judges, which favour longer answers: for simplicity the judge leans the other
-way. On the natural benchmarks it leans on length more than a readability formula does (Wu &amp; Arase: −0.53 against −0.18 for FKGL). A caveat
+<p class="finding">A comparison of LLM judges compares a model and its scoring rule together. With its graded score, the smaller judge leads on
+meaning and ties on simplicity; scored by digits, as a reasoning judge has to be, it still leads on meaning but trails on simplicity.</p>
+<p>The judges also agree with each other on what they measure: their fingerprints on the natural benchmarks are almost identical (simplicity
+prompt β<sub>M</sub> −0.02, β<sub>S</sub> 0.61 for both; meaning prompt β<sub>M</sub> 0.81 and 0.76; Figure 6).</p>
+
+<h3><span class="num">6.3</span>Do judges reward shorter outputs?</h3>
+<p>We test whether a judge's simplicity score depends on length beyond what the human ratings explain: partial r(judge S, L | human M, human S).
+For comparison we run the same test on two metrics. On the contrast set we can also control for the design instead of the ratings (designed
+meaning and simplicity), which lets us run the test on the human annotator too.</p>
+
+<figure class="fig" id="f11">
+  <div class="fig-title">Figure 14. Both judges treat shorter as simpler, beyond the humans</div>
+  <div class="fig-sub">Partial correlation of each measure's simplicity score with length (compression ratio), controlling for human meaning and simplicity (top row: for the designed meaning and simplicity), with 95% cluster-bootstrap CI. Shaded band: |r| &lt; 0.15, the pre-registered bias threshold.</div>
+  <div class="legend" id="leg-f11"></div>
+  <div class="chart" id="c-f11"></div>
+  <figcaption>Negative = longer outputs get lower simplicity scores than the human ratings (or the design) warrant. Natural benchmarks: final for both judges. Contrast set: pilot, one annotator.</figcaption>
+</figure>
+
+<p class="finding">The pre-registered bias finding (|partial r| ≥ 0.15 with the CI excluding 0, for at least one judge) holds on natural data
+for both judges: Qwen3.8-27B on three benchmarks (Wu &amp; Arase −0.52, QATS 2016 −0.44, Scialom (human) −0.30), gpt-oss-120b on six
+(Wu &amp; Arase −0.47, Scialom (human) −0.40, QATS 2016 −0.35, SimpDA 2022 −0.28, Simplicity-DA −0.20, SimpLikert 2022 −0.20). On the
+contrast-set pilot it is −0.38 and −0.50.</p>
+<p>This is not the familiar verbosity bias of pairwise preference judges, which favour longer answers: for simplicity the judges lean the other
+way. On the natural benchmarks the judges lean on length more than a readability formula does (Wu &amp; Arase: −0.52 and −0.47 against −0.18
+for FKGL). A caveat
 applies: noisy human ratings under-control for true simplicity, so part of a natural-data partial correlation can be real simplicity. The contrast
-set gives the cleaner test, because length is uncorrelated with the design, and there the picture is broader. Controlling for the designed factors
-instead of the ratings, every simplicity measure treats shorter as simpler more than the human annotator does (−0.32): the judge most (−0.61),
-but FKGL (−0.57) and SIMPLE-large (−0.54) nearly as much. The shortcut is not specific to LLM judges; they are simply not free of it.</p>
+set gives the cleaner test, because length is uncorrelated with the design, and there the picture is broader (Figure 14, top row). Controlling
+for the designed factors instead of the ratings, every simplicity measure treats shorter as simpler more than the human annotator does
+(−0.32): gpt-oss most (−0.66), then Qwen (−0.61), but FKGL (−0.57) and SIMPLE-large (−0.54) nearly as much. The shortcut is not specific to
+LLM judges; they are simply not free of it.</p>
 <div class="callout plan"><div class="kicker">Planned</div>
 <ul>
-  <li><b>gpt-oss-120b</b> (second judge, native MXFP4) is running: contrast pilot, then the natural sample.</li>
   <li>Both judges on the full contrast set after annotation; H7 final at G4 (19 Dec).</li>
-  <li>Judge fingerprints (exploratory, shown in Figure 6) with bootstrap CIs.</li>
+  <li>Judge fingerprints (exploratory, shown in Figure 6) with bootstrap CIs, and the judge-versus-judge differences of Figure 13 with the
+  digit-only scores bootstrapped too.</li>
 </ul></div>
 
 <h2 id="discussion"><span class="num">7</span>Discussion</h2>
 <p><b>What to do in practice.</b> A metric's correlation with simplicity on one benchmark says as much about that benchmark's annotators as about
 the metric. Report the benchmark's ρ next to any correlation, report fingerprints rather than raw correlations, and choose metrics by
-fingerprint: their rankings agree across benchmarks (§3). For meaning, an open LLM judge is now the strongest automatic measure we tested; for
-simplicity, no single metric wins everywhere, and the judge's length bias should be checked before it is trusted.</p>
+fingerprint: their rankings agree across benchmarks (§3). For meaning, open LLM judges are now the strongest automatic measures we tested,
+and a 27B judge is at least as good as a 120B one; for simplicity, no single measure wins everywhere, and a judge's length bias should be
+checked before it is trusted. When judges are compared, they should be scored the same way (§6.2).</p>
 <p><b>What the contrast set adds.</b> On natural data, a metric's meaning signal and its copying of the source come together. When meaning,
 simplicity and length are crossed by design, most metrics that looked like meaning metrics are not, and the metrics that look like simplicity
 metrics mostly are. The contrast set is the evidence natural benchmarks cannot provide.</p>
@@ -415,11 +448,16 @@ item-level; system-level conclusions may differ.</p>
   that ceiling. "0.77" means something different at a ceiling of 0.80 than at 0.95. <i>Cost: one analysis once annotation is done.</i></li>
   <li><b>Rater-free contrast analyses as co-primary.</b> Every contrast-set result also against the validated design labels (already implemented).
   It protects the contrast-set story against annotator noise and the annotation budget. <i>Cost: none; reporting only.</i></li>
-  <li><b>A length-controlled judge.</b> Re-run the judge on the contrast pilot with one added instruction ("length alone is not simplicity") and
+  <li><b>Score every judge the same way.</b> A reasoning judge gives one digit; sample it several times (e.g. five samples at temperature
+  0.7) and average, so its score is graded like a direct judge's, and report both judges with both scoring rules. It removes the
+  resolution confound from the judge comparison (§6.2) before a reviewer finds it. <i>Cost: about 5× the gpt-oss calls on the contrast
+  pilot and one natural benchmark, ~1 GPU-day on the shared machine.</i></li>
+  <li><b>A length-controlled judge.</b> Re-run the judges on the contrast pilot with one added instruction ("length alone is not simplicity") and
   report how its fingerprint and partial r change. That turns the bias finding into a usable recommendation. <i>Cost: about 3 GPU-hours.</i></li>
-  <li><b>Make the length test comparative.</b> On the contrast set, FKGL and SIMPLE lean on length almost as much as the judge. Report the
-  length test for every simplicity measure, not only for judges; "every automatic simplicity measure takes the length shortcut, humans less so"
-  is a stronger and more general finding than a judge-only bias. <i>Cost: the code exists; reporting only.</i></li>
+  <li><b>Make the length test comparative</b> (started: Figure 14, top row). Given the design, FKGL and SIMPLE lean on length almost as much
+  as the judges, and all of them more than the annotator. Report the length test for every simplicity measure on the full set;
+  "every automatic simplicity measure takes the length shortcut, humans less so" is a stronger and more general finding than a judge-only
+  bias. <i>Cost: the code exists; reporting only.</i></li>
   <li><b>One closed API judge</b> (allowed by the plan if budget permits) for external validity on the contrast set and a 2,000-item natural
   subsample. <i>Cost: small; about 10k calls.</i></li>
   <li><b>System-level fingerprints</b> in an appendix, for the benchmarks with at least six systems, because many metric papers report
@@ -468,7 +506,8 @@ confirmatory family {H1, H2, H3, H8}. <b>Reliability.</b> Split-half per dimensi
 ρ* = ρ / √(R<sub>M</sub>R<sub>S</sub>) and c* = c / √R. <b>Ranking consistency.</b> Kendall τ<sub>b</sub> between the metric rankings of two
 benchmarks, by raw r<sub>S</sub> and by β<sub>S</sub>. <b>Length.</b> L = compression ratio; partial r(X, S | L); matched pairs = two outputs
 of one source with |ΔL| ≤ 0.05 and clearly different human simplicity. <b>Judges.</b> Qwen3.8-27B (GGUF Q8_0, thinking off) and gpt-oss-120b
-(native MXFP4, low reasoning effort), served locally with llama.cpp; expected score over the top-10 digit log-probabilities.</p>
+(native MXFP4, low reasoning effort), served locally with llama.cpp; expected score over the top-10 digit log-probabilities (gpt-oss
+reasons before answering and puts probability ≈ 1 on one digit, so its expected score is its answered digit).</p>
 </details>
 
 <details class="appendix"><summary>D. Related work and novelty (scan of 17 Nov 2026)</summary>
@@ -497,7 +536,7 @@ factorial human-rated contrast set, and the LLM-judge length test for simplicity
 <tr><td>G0 Feasibility</td><td>Thu 19 Nov</td><td>Benchmarks, annotators, ethics, novelty</td><td><span class="badge pass">Done</span> 9 benchmarks, ethics approved, novelty scan; 2 of 3 annotators</td></tr>
 <tr><td>G1 Pilot</td><td>Sun 29 Nov</td><td>Contrast set passes H5 → full set</td><td><span class="badge warn">In progress</span> pilot rated by 1 of 3 annotators</td></tr>
 <tr><td>G2 Story</td><td>Sun 6 Dec</td><td>Paper framing from Experiment 1</td><td><span class="badge pass">Results ready</span> pre-registered rule points to the descriptive framing</td></tr>
-<tr><td>G3 Production</td><td>Sun 13 Dec</td><td>Full set validated, annotation ≥ 50%, judges on natural data</td><td><span class="badge warn">In progress</span> judge 1 of 2 done on natural data</td></tr>
+<tr><td>G3 Production</td><td>Sun 13 Dec</td><td>Full set validated, annotation ≥ 50%, judges on natural data</td><td><span class="badge warn">In progress</span> both judges done on natural data</td></tr>
 <tr><td>G4 Data complete</td><td>Sat 19 Dec</td><td>Annotation done; H5, H6, H7</td><td><span class="badge plan">Planned</span></td></tr>
 <tr><td>G5 Draft freeze</td><td>Mon 28 Dec</td><td>Internal review; submission Sat 2 Jan 2027</td><td><span class="badge plan">Planned</span></td></tr>
 </tbody></table></div>
