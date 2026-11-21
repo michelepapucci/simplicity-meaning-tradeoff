@@ -1,3 +1,33 @@
+/* Numbering of figures, tables and sections, and the text of cross-references (<a class="xref" href="#id">).
+   Runs on its own, before the figures, so the paper reads correctly even if the chart libraries do not load. */
+(function () {
+  "use strict";
+  const label = {};
+  let nf = 0, nt = 0;
+  document.querySelectorAll("figure.fig, figure.tab").forEach((fg) => {
+    const tab = fg.classList.contains("tab");
+    const name = `${tab ? "Table" : "Figure"} ${tab ? ++nt : ++nf}`;
+    label[fg.id] = name;
+    const t = fg.querySelector(".fig-title");
+    if (t && !t.querySelector(".fig-num")) {
+      const s = document.createElement("span");
+      s.className = "fig-num"; s.textContent = `${name}. `;
+      t.prepend(s);
+    }
+  });
+  document.querySelectorAll("h2[id], h3[id]").forEach((h) => {
+    const n = h.querySelector(".num");
+    if (!n) return;
+    const v = n.textContent.trim();
+    label[h.id] = /^[A-Z]$/.test(v) ? `Appendix ${v}` : `§${v}`;
+  });
+  document.querySelectorAll("a.xref").forEach((a) => {
+    const id = (a.getAttribute("href") || "").slice(1);
+    if (label[id]) a.textContent = label[id];
+    else a.textContent = a.textContent || "(missing reference)";
+  });
+})();
+
 /* Interactive paper draft: figures from window.SITE_DATA (built by scripts/build_site.py). */
 (function () {
   "use strict";
@@ -959,6 +989,72 @@
         JUDGES.map((j) => pct(it(j.key, "j1 and reversed").flip_share)).join(" and ") + " between j1 and reversed alone.";
     });
   }
+
+  // ---------------------------------------------------------------- fingerprint calculator (§6)
+  (function () {
+    const ctl = $("ctl-fcalc"), out = $("c-fcalc");
+    if (!ctl || !out) return;
+    const st = { rM: 0.75, rS: 0.56, rho: 0.74 };
+    const box = {};
+    let note = "";
+    const clamp = (v) => Math.max(-0.99, Math.min(0.99, v));
+    const num = (key, label) => {
+      const i = el("input", { type: "number", min: "-0.99", max: "0.99", step: "0.01", value: st[key].toFixed(2), class: "num-in", "aria-label": label });
+      i.addEventListener("input", () => { const v = parseFloat(i.value); if (Number.isFinite(v)) { st[key] = clamp(v); note = ""; render(); } });
+      box[key] = i;
+      ctl.append(el("label", {}, document.createTextNode(label), i));
+    };
+    num("rM", "r(X, M)"); num("rS", "r(X, S)"); num("rho", "ρ = r(M, S)");
+    const pick = { metric: "", bench: "" };
+    const load = () => {
+      if (!pick.metric || !pick.bench) return;
+      const r = fpObs.find((x) => x.metric === pick.metric && x.resource === pick.bench);
+      if (!r) { note = `${mName(pick.metric)} has no scores on ${bName(pick.bench)}.`; render(); return; }
+      st.rM = r.r_M; st.rS = r.r_S; st.rho = r.rho;
+      for (const k of ["rM", "rS", "rho"]) box[k].value = st[k].toFixed(2);
+      note = `Loaded: ${mName(pick.metric)} on ${bName(pick.bench)} (n = ${Number(r.n).toLocaleString("en-US")}).`;
+      render();
+    };
+    const ms = metricOrder([...new Set(fpObs.map((r) => r.metric))]);
+    select(ctl, "Load metric", [["", "choose…"], ...ms.map((m) => [m, mName(m)])], "", (v) => { pick.metric = v; load(); });
+    select(ctl, "on", [["", "choose…"], ...benchOptions], "", (v) => { pick.bench = v; load(); });
+    const T0 = 0.15;
+    const PROFILE = {
+      "1,0": "Meaning only: rewards keeping the content, whatever the difficulty.",
+      "0,1": "Simplicity only: rewards easier text, whatever happened to the content.",
+      "1,1": "Both: rewards a good simplification, simpler and faithful.",
+      "-1,1": "Simpler by dropping content: rewards outputs that got simpler by losing information.",
+      "1,-1": "Copies the source: rewards staying close to the source, faithful but no simpler.",
+      "0,0": "Neither weight reaches 0.15: aligned, but with no clear direction on either dimension.",
+      "-1,0": "Outside the five profiles: rewards losing meaning.",
+      "0,-1": "Outside the five profiles: rewards harder text.",
+      "-1,-1": "Outside the five profiles: rewards losing meaning and harder text.",
+    };
+    const sgn = (b) => (b >= T0 ? 1 : b <= -T0 ? -1 : 0);
+    function render() {
+      const { rM, rS, rho } = st;
+      const d = 1 - rho * rho;
+      const bM = (rM - rho * rS) / d, bS = (rS - rho * rM) / d;
+      const R2 = bM * rM + bS * rS;
+      const feasible = R2 <= 1 + 1e-9;
+      const R = Math.sqrt(Math.max(0, R2));
+      const prof = !feasible ? "–" : R < 0.2 ? "Not aligned (R < 0.20): the metric barely relates to either rating, so the direction of its fingerprint means little."
+        : PROFILE[`${sgn(bM)},${sgn(bS)}`];
+      const row = (k, v, sub) => [el("dt", { text: k }), el("dd", {}, el("span", { class: "v", text: v }), sub ? el("span", { class: "sub", text: sub }) : null)];
+      const dl = el("dl", { class: "calc-grid" },
+        ...row("Weight on meaning, β_M", f2(bM), "(r_M − ρ r_S) / (1 − ρ²)"),
+        ...row("Weight on simplicity, β_S", f2(bS), "(r_S − ρ r_M) / (1 − ρ²)"),
+        ...row("Alignment, R", feasible ? f2(R) : "–", feasible ? `R² = β_M r_M + β_S r_S = ${f2(R2)}` : ""),
+        ...row("Profile", prof),
+        ...row("r(X, S) split", `${f2(rS)} = ${f2(bS)} direct ${sg(rho * bM)} through meaning`),
+        ...row("r(X, M) split", `${f2(rM)} = ${f2(bM)} direct ${sg(rho * bS)} through simplicity`));
+      const kids = [dl];
+      if (!feasible) kids.unshift(el("p", { class: "calc-warn", text: `These three correlations cannot occur together: R² = ${f2(R2)} > 1, so the correlation matrix of X, M and S is not positive semi-definite. On a benchmark with this ρ, no metric has these correlations.` }));
+      if (note) kids.unshift(el("p", { class: "note", text: note }));
+      out.replaceChildren(...kids);
+    }
+    render();
+  })();
 
   // ---------------------------------------------------------------- appendix: pre-registered checks
   function checksTable() {

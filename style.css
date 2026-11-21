@@ -200,3 +200,31 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
 @media (max-width: 760px) { .two-col.wide-left { grid-template-columns: 1fr; } }
 #t-f10 td.num { white-space: nowrap; }
 #t-f10 .badge { padding: 0 6px; }
+
+/* paper structure: tables as numbered floats, checklist, calculator, prompts, draft notes */
+figure.tab { margin: 24px 0; }
+figure.tab .fig-title { font-family: var(--sans); font-size: 14px; font-weight: 600; margin: 0; }
+figure.tab .tbl-wrap { margin-top: 6px; }
+.fig-num { font-weight: 700; }
+ol.checklist { padding-left: 24px; }
+ol.checklist li { margin: 9px 0; }
+.num-in {
+  width: 5.2em; font: inherit; font-size: 14px; color: var(--ink); background: var(--page); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 6px; font-variant-numeric: tabular-nums;
+}
+.calc-out { font-family: var(--sans); font-size: 14px; }
+.calc-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 6px 0; }
+.calc-grid dt { color: var(--ink-2); }
+.calc-grid dd { margin: 0; }
+.calc-grid .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.calc-grid .sub { color: var(--ink-2); margin-left: 10px; font-size: 13px; }
+.calc-warn { border-left: 3px solid var(--critical); padding: 4px 10px; background: var(--wash); }
+@media (max-width: 560px) { .calc-grid { grid-template-columns: 1fr; gap: 0 0; } .calc-grid dd { margin-bottom: 8px; } .calc-grid .sub { display: block; margin-left: 0; } }
+pre.prompt {
+  white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0;
+}
+.prose details.appendix > summary { font-size: 15px; }
+.todo { font-family: var(--sans); font-size: 0.85em; color: var(--ink-2); border: 1px dashed var(--muted); border-radius: 4px; padding: 0 4px; }
+.draft-notes { margin-top: 80px; border-top: 3px double var(--border); }
+.draft-notes > h2 { margin-top: 20px; }
