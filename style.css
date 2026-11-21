@@ -151,6 +151,7 @@ select, .seg button {
 .legend i.ring { background: transparent !important; border: 2px solid; width: 10px; height: 10px; }
 .legend i.bar { border-radius: 2px; width: 14px; height: 8px; }
 .legend i.line { border-radius: 0; width: 16px; height: 2px; }
+.legend i.tick { border-radius: 0; width: 2px; height: 12px; }
 
 details.data { margin-top: 6px; font-family: var(--sans); font-size: 13px; }
 details.data summary { cursor: pointer; color: var(--ink-2); }

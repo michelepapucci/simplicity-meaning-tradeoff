@@ -23,7 +23,7 @@
     T = {
       ink: css("--ink"), ink2: css("--ink-2"), muted: css("--muted"), grid: css("--grid"), axis: css("--axis"),
       surface: css("--surface"), s1: css("--s1"), s2: css("--s2"), s3: css("--s3"),
-      neg: css("--div-neg"), mid: css("--div-mid"), pos: css("--div-pos"), accent: css("--accent"), wash: css("--wash"),
+      neg: css("--div-neg"), mid: css("--div-mid"), pos: css("--div-pos"), accent: css("--accent"), wash: css("--wash"), plan: css("--plan"),
     };
   }
   const GROUPS = ["similarity", "learned", "proxy"];
@@ -824,6 +824,141 @@
     }), dataView(rows, [{ key: "series", label: "Measure" }, { key: "name", label: "Data" }, { key: "partial_r", label: "partial r", num: true, fmt: f2 },
       { key: "ci_lo", label: "95% CI", num: true, fmt: (v, r) => ci(r.ci_lo, r.ci_hi) }, { key: "n", label: "n", num: true }]));
   });
+
+  // ---------------------------------------------------------------- Figures 15-16: prompt ablation (exploratory)
+  const PA = E3.prompts;
+  if (PA) {
+    const PR = PA.prompts;                                                 // j1 first
+    const PLABEL = { j1: "j1 (main prompt)", bare: "bare", reversed: "reversed", reader: "reader", explain: "explain" };
+    const pColor = (p) => ({ j1: T.ink, bare: T.s1, reversed: T.s2, reader: T.s3, explain: T.plan }[p] || T.ink);
+    const dimWord = (d) => (d === "M" ? "meaning" : "simplicity");
+    // narrow screens: row labels above the rows instead of in a left margin (long benchmark names would be cut)
+    const rowLayout = (width, names, rowH, wideMargin, labelDy) => {
+      const narrow = width < 520;
+      return {
+        narrow, height: (narrow ? rowH + 16 : rowH) * names.length + 50, marginLeft: narrow ? 8 : wideMargin,
+        y: { domain: names, label: null, axis: narrow ? null : "left" },
+        marks: narrow ? [Plot.text(names, { y: (d) => d, text: (d) => d, frameAnchor: "left", textAnchor: "start", dy: labelDy, fill: T.ink2, fontSize: 11 })] : [],
+      };
+    };
+    const s15 = { judge: JUDGES[0].key, dim: "S" };
+    seg($("ctl-f15"), "Judge", JUDGES.map((j) => [j.key, j.name]), s15.judge, (v) => { s15.judge = v; renderF15(); });
+    seg($("ctl-f15"), "Human rating", [["M", "Meaning"], ["S", "Simplicity"]], s15.dim, (v) => { s15.dim = v; renderF15(); });
+    const renderF15 = () => {
+      legend("leg-f15", [...PR.map((p) => ({ label: PLABEL[p], color: pColor(p) })),
+        { label: "ring: significantly different from j1", color: T.ink2, kind: "ring" },
+        { label: "best non-judge metric", color: T.muted, kind: "tick" }]);
+      const V = PA.validity.filter((r) => r.judge === s15.judge && r.dim === s15.dim);
+      const VS = PA.vs_metrics.filter((r) => r.judge === s15.judge && r.dim === s15.dim);
+      const datas = [...new Set(V.map((r) => r.data))];
+      const nat = datas.filter((d) => !d.startsWith("contrast"));
+      const at = (rows, d, p) => rows.find((r) => r.data === d && r.prompt === p);
+      nat.sort((a, b) => (at(V, b, "j1") || {}).r - (at(V, a, "j1") || {}).r);
+      const MEAN = "__mean";
+      const lab = (d) => (d === MEAN ? "Mean of the nine" : bName(d));
+      const order = [MEAN, ...nat, ...datas.filter((d) => d.startsWith("contrast"))];
+      const pts = [];
+      for (const d of order) for (const [i, p] of PR.entries()) {
+        if (d === MEAN) {
+          const vv = VS.filter((r) => r.prompt === p && nat.includes(r.data));
+          pts.push({ data: d, name: lab(d), prompt: p, i, mean: true, r: mean(V.filter((r) => r.prompt === p && nat.includes(r.data)).map((r) => r.r)),
+            worse: vv.filter((r) => r.verdict === "worse").length, better: vv.filter((r) => r.verdict === "better").length, sig: false });
+        } else {
+          const v = at(V, d, p);
+          if (v) pts.push({ ...v, name: lab(d), i, sig: p !== "j1" && (v.delta_lo > 0 || v.delta_hi < 0), vs: at(VS, d, p) || {} });
+        }
+      }
+      const best = order.map((d) => {
+        if (d === MEAN) return { name: lab(d), r_best: mean(nat.map((x) => (at(VS, x, "j1") || {}).r_best).filter((x) => x != null)), mean: true };
+        const w = at(VS, d, "j1") || {};
+        return { name: lab(d), r_best: w.r_best, metric: w.best_metric };
+      }).filter((b) => b.r_best != null);
+      const span = order.map((d) => { const xs = pts.filter((q) => q.data === d).map((q) => q.r); return { name: lab(d), lo: d3.min(xs), hi: d3.max(xs) }; });
+      const node = $("c-f15"); const width = Math.min(widthOf(node, 760), 760);
+      const dyOf = (i) => (i - (PR.length - 1) / 2) * 6;
+      const tip = (q) => q.mean
+        ? `${PLABEL[q.prompt]}: mean r over the nine = ${f2(q.r)}\nagainst the best metric: worse on ${q.worse}, better on ${q.better} of 9`
+        : `${PLABEL[q.prompt]} on ${q.name}\nr = ${f2(q.r)} ${ci(q.r_lo, q.r_hi)}, n = ${q.n}` +
+          (q.prompt !== "j1" ? `\n− j1: ${sg(q.delta_vs_first)} ${ci(q.delta_lo, q.delta_hi)}` : "") +
+          (q.vs.best_metric ? `\nagainst ${mName(q.vs.best_metric)} (${f2(q.vs.r_best)}): ${q.vs.verdict}` : "");
+      const lo = Math.min(0, Math.floor((d3.min(pts, (q) => q.r) - 0.05) * 10) / 10);
+      const RL = rowLayout(width, order.map(lab), 40, Math.min(170, width * 0.34), -22);
+      const marks = [
+        ...RL.marks,
+        Plot.ruleX([0], { stroke: T.axis }),
+        Plot.ruleY(span, { y: "name", x1: "lo", x2: "hi", stroke: T.grid, strokeWidth: 2 }),
+        Plot.tickX(best, { x: "r_best", y: "name", stroke: T.muted, strokeWidth: 2, tip: true,
+          title: (b) => b.mean ? `best metric per benchmark, mean of the nine: ${f2(b.r_best)}` : `best non-judge metric: ${mName(b.metric)}, r = ${f2(b.r_best)}` }),
+      ];
+      for (const [i, p] of PR.entries()) {
+        const mine = pts.filter((q) => q.prompt === p);
+        const rr = p === "j1" ? 6.5 : 5;
+        marks.push(Plot.dot(mine.filter((q) => !q.sig), { x: "r", y: "name", dy: dyOf(i), r: rr, fill: pColor(p), stroke: T.surface, strokeWidth: 1.5, tip: true, title: tip }));
+        marks.push(Plot.dot(mine.filter((q) => q.sig), { x: "r", y: "name", dy: dyOf(i), r: rr - 0.5, fill: T.surface, stroke: pColor(p), strokeWidth: 2, tip: true, title: tip }));
+      }
+      put("c-f15", plot({
+        width, height: RL.height, marginLeft: RL.marginLeft, marginRight: 16,
+        x: { domain: [lo, 1], label: `r with human ${dimWord(s15.dim)} →`, grid: true, tickFormat: (x) => f2(x, 1) },
+        y: RL.y,
+        marks,
+      }), dataView(pts.filter((q) => !q.mean), [
+        { key: "name", label: "Data" }, { key: "prompt", label: "Prompt" }, { key: "r", label: "r [95% CI]", num: true, fmt: (v, q) => `${f2(v)} ${ci(q.r_lo, q.r_hi)}` },
+        { key: "delta_vs_first", label: "− j1 [95% CI]", num: true, fmt: (v, q) => (q.prompt === "j1" ? "–" : `${sg(v)} ${ci(q.delta_lo, q.delta_hi)}`) },
+        { key: "vs", label: "vs best metric", fmt: (v) => (v && v.verdict ? `${v.verdict} (${mName(v.best_metric)} ${f2(v.r_best)})` : "–") },
+        { key: "n", label: "n", num: true }]));
+      const m = Object.fromEntries(PR.map((p) => [p, pts.find((q) => q.mean && q.prompt === p)]));
+      $("cap-f15").textContent = `${JNAME[s15.judge]}, ${dimWord(s15.dim)}: mean r over the nine benchmarks ` +
+        PR.map((p) => `${p} ${f2(m[p].r)}`).join(", ") + `. Below the best metric on ` + PR.map((p) => `${m[p].worse}`).join(" / ") +
+        ` of the nine (same order).`;
+    };
+    figure(renderF15);
+
+    figure(() => {
+      const A = PA.agreement;
+      const rows = [];
+      const add = (name, sel) => {
+        for (const dim of ["M", "S"]) {
+          const x = sel.filter((r) => r.dim === dim);
+          const per = d3.rollups(x, (v) => mean(v.map((r) => r.pearson)), (r) => r.data).map((e) => ({ data: e[0], r: e[1] }));
+          if (!per.length) continue;
+          rows.push({ name, dim, r: mean(x.map((r) => r.pearson)), lo: d3.min(per, (e) => e.r), hi: d3.max(per, (e) => e.r),
+            worst: per.reduce((a, b) => (b.r < a.r ? b : a)).data, nData: per.length, nPairs: Math.round(x.length / per.length) });
+        }
+      };
+      const own = (j, noBare) => A.filter((r) => r.judge === j && (!noBare || (r.a !== "bare" && r.b !== "bare")));
+      for (const j of JUDGES) add(`${JSHORT[j.key]}: two prompts`, own(j.key, false));
+      for (const j of JUDGES) add(`${JSHORT[j.key]}: two prompts, no bare`, own(j.key, true));
+      add("Two judges: j1", A.filter((r) => r.judge.includes(" vs ") && r.a === "j1"));
+      add("Two judges: same prompt", A.filter((r) => r.judge.includes(" vs ")));
+      const SER = [{ dim: "M", label: "Meaning", hollow: true, dy: -5 }, { dim: "S", label: "Simplicity", hollow: false, dy: 5 }];
+      legend("leg-f16", [...SER.map((s) => ({ label: s.label, color: T.ink, hollow: s.hollow })),
+        { label: "range over the ten data sets", color: T.ink2, kind: "line" }]);
+      const names = [...new Set(rows.map((r) => r.name))];
+      const node = $("c-f16"); const width = Math.min(widthOf(node, 720), 720);
+      const tip = (r) => `${r.name}, ${r.dim === "M" ? "meaning" : "simplicity"}\nmean r = ${f2(r.r)} (${r.nPairs} pair${r.nPairs > 1 ? "s" : ""} x ${r.nData} data sets)\n` +
+        `per data set ${f2(r.lo)} to ${f2(r.hi)} (lowest: ${bName(r.worst)})`;
+      const RL = rowLayout(width, names, 44, Math.min(200, width * 0.44), -16);
+      const marks = [...RL.marks, Plot.ruleX([0], { stroke: T.axis })];
+      for (const s of SER) {
+        const rr = rows.filter((r) => r.dim === s.dim);
+        marks.push(Plot.ruleY(rr, { y: "name", x1: "lo", x2: "hi", dy: s.dy, stroke: T.ink2, strokeOpacity: 0.55, strokeWidth: 1.5 }));
+        marks.push(Plot.dot(rr, { x: "r", y: "name", dy: s.dy, r: 5.5, fill: s.hollow ? T.surface : T.ink, stroke: s.hollow ? T.ink : T.surface,
+          strokeWidth: s.hollow ? 2 : 1.5, tip: true, title: tip }));
+      }
+      put("c-f16", plot({
+        width, height: RL.height, marginLeft: RL.marginLeft, marginRight: 16,
+        x: { domain: [Math.min(-0.1, d3.min(rows, (r) => r.lo) - 0.02), 1], label: "agreement (Pearson r) →", grid: true, tickFormat: (x) => f2(x, 1) },
+        y: RL.y,
+        marks,
+      }), dataView(rows, [{ key: "name", label: "Comparison" }, { key: "dim", label: "Rating", fmt: (v) => (v === "M" ? "Meaning" : "Simplicity") },
+        { key: "r", label: "mean r", num: true, fmt: f2 }, { key: "lo", label: "range over data sets", num: true, fmt: (v, r) => `${f2(r.lo)} to ${f2(r.hi)}` }]));
+      const it = (j, set) => PA.items.find((r) => r.judge === j && r.dim === "S" && r.prompts === set) || {};
+      $("cap-f16").textContent = "Item level, simplicity: the same judge rates an item simpler than the original under one prompt and harder under " +
+        "another (expected score ≥ +0.5 and ≤ −0.5) for " + JUDGES.map((j) => `${pct(it(j.key, "all five").flip_share)} (${j.name})`).join(" and ") +
+        " of the items; " + JUDGES.map((j) => pct(it(j.key, "without bare").flip_share)).join(" and ") + " without bare; " +
+        JUDGES.map((j) => pct(it(j.key, "j1 and reversed").flip_share)).join(" and ") + " between j1 and reversed alone.";
+    });
+  }
 
   // ---------------------------------------------------------------- appendix: pre-registered checks
   function checksTable() {

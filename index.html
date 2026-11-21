@@ -49,7 +49,9 @@ that differs from benchmark to benchmark. A factorial contrast set, in which mea
 two apart: in a pilot, readability formulas and learned simplicity metrics track simplicity more cleanly than on any natural benchmark,
 length ratios carry none of the designed simplicity, and only two metrics track meaning at all. Two open LLM judges (Qwen3.8-27B and gpt-oss-120b) are the best meaning measures on most benchmarks and on the
 contrast set, are on par with the best metric for simplicity, and reward shorter outputs more than human raters do; the larger judge is
-not the better one, partly because of how its answers can be scored.</p>
+not the better one, partly because of how its answers can be scored. Their simplicity results, unlike their meaning results, depend on
+the prompt: across five prompts their meaning validity barely moves, while their simplicity validity ranges from 0.26 to 0.60
+(exploratory).</p>
 
 <h2 id="intro"><span class="num">1</span>Introduction</h2>
 <p>A simplification metric is usually trusted because its scores correlate with human ratings. Most benchmarks rate two things,
@@ -364,7 +366,7 @@ only for Qwen (0.78 and 0.76 against SIMPLE-large's 0.74).</p>
 <p>Two readings follow. The judges solve the meaning side, where the contrast set shows metrics to be weakest. On the simplicity side, a
 judge is roughly as good as the best metric, but which metric is best changes from benchmark to benchmark (LENS, SIMPLE, BLEU against
 the source, compression ratio), while the judges are near the top everywhere: averaged over the nine benchmarks they score 0.59 (Qwen) and
-0.57 (gpt-oss) against 0.56 for the best single metric.</p>
+0.57 (gpt-oss) against 0.56 for the best single metric. That holds for the prompt we wrote; §6.4 shows how much it depends on it.</p>
 
 <h3><span class="num">6.2</span>Is the larger judge better?</h3>
 <p>No. gpt-oss-120b has four times the parameters of Qwen3.8-27B, but on meaning it is significantly lower on six of the ten data sets
@@ -414,6 +416,79 @@ set gives the cleaner test, because length is uncorrelated with the design, and 
 for the designed factors instead of the ratings, every simplicity measure treats shorter as simpler more than the human annotator does
 (−0.32): gpt-oss most (−0.66), then Qwen (−0.61), but FKGL (−0.57) and SIMPLE-large (−0.54) nearly as much. The shortcut is not specific to
 LLM judges; they are simply not free of it.</p>
+
+<h3><span class="num">6.4</span>Is a judge's score a property of the model or of its prompt?</h3>
+<p>Everything above uses one prompt per dimension (j1), written with the annotators' definitions. To see how much the results depend on that
+wording, both judges answered the same two questions under four more prompts that ask for the judgment in very different ways
+(exploratory, not pre-registered):</p>
+<div class="tbl-wrap"><table>
+  <thead><tr><th>Prompt</th><th>How it asks</th></tr></thead>
+  <tbody>
+    <tr><td>j1</td><td>The annotators' definitions and scale; for simplicity, "think of the words and the sentence structure; this is not about
+      length".</td></tr>
+    <tr><td>bare</td><td>The question and the ends of the scale only: "How much simpler is the simplified text than the original?
+      (1 = much more complex, 5 = much simpler)". No definitions.</td></tr>
+    <tr><td>reversed</td><td>Framed as a problem to rate, with the scale flipped: how much information is lost, changed or invented; how much
+      harder to read the rewrite is.</td></tr>
+    <tr><td>reader</td><td>A teacher choosing texts for adults learning English. Simplicity is rated for the rewrite on its own ("how easy would it
+      be for one of these readers?"), not against the original.</td></tr>
+    <tr><td>explain</td><td>The judge first notes the changes in at most three lines, then ends with "Rating: N".</td></tr>
+  </tbody>
+</table></div>
+<p>Every prompt is answered with one digit from 1 to 5, scored as before (expected rating over the digits) and mapped onto j1's scales, so
+only the wording changes. The items are the 199 contrast-pilot items and 60 items per natural benchmark spread over its sources (739
+items, each answered under all five prompts by both judges, about 5,900 calls per judge).</p>
+
+<figure class="fig" id="f15">
+  <div class="fig-title">Figure 15. Meaning survives a change of prompt; simplicity does not</div>
+  <div class="fig-sub">Correlation with the human rating on the same items under each prompt. Ring = significantly different from j1 (paired
+  cluster bootstrap, 95% CI of the difference excludes 0). Tick = the best non-judge metric on the same items, chosen per benchmark after the
+  fact. Hover a point for its CI and its verdict against that metric.</div>
+  <div class="controls" id="ctl-f15"></div>
+  <div class="legend" id="leg-f15"></div>
+  <div class="chart" id="c-f15"></div>
+  <figcaption id="cap-f15"></figcaption>
+</figure>
+
+<p class="finding">For meaning the prompt hardly matters. Averaged over the nine benchmarks the five prompts give 0.72–0.79 (Qwen3.8-27B)
+and 0.64–0.71 (gpt-oss-120b), and the judges' standing against the metrics does not change: Qwen is significantly better than the best metric
+on four to six of the ten data sets under every prompt, and worse on none. For simplicity the prompt matters a great deal. j1 is the best of
+the five for both judges (0.60 and 0.57); no other prompt beats it significantly on any data set, and 11 (gpt-oss) and 12 (Qwen) of the 40
+prompt × data-set comparisons are significantly worse. Without a definition (bare), simplicity validity falls to 0.27 and 0.26 on average,
+and to between −0.02 and 0.22 on ASSET and Scialom (system), where j1 reaches 0.73–0.76. With j1 the judges tie the best metric on every data set (Qwen beats
+it on the contrast pilot); under the other prompts they fall below it on one to seven of the ten.</p>
+
+<figure class="fig" id="f16">
+  <div class="fig-title">Figure 16. For simplicity, the prompt matters as much as the model</div>
+  <div class="fig-sub">Agreement (Pearson r) between two sets of judge scores on the same items: one judge under two different prompts (mean
+  over the prompt pairs), or the two judges under the same prompt. Dot = mean over the ten data sets; line = range of the per-data-set
+  values.</div>
+  <div class="legend" id="leg-f16"></div>
+  <div class="chart" id="c-f16"></div>
+  <figcaption id="cap-f16"></figcaption>
+</figure>
+
+<p>A judge under two prompts agrees with itself on meaning (0.91 Qwen, 0.81 gpt-oss) but much less on simplicity (0.56 and 0.48, and 0.66 and
+0.61 with bare left out). The two judges given the same j1 prompt agree on simplicity at 0.74: rewording the prompt moves a judge about as
+much as replacing the model. What moves is what the simplicity score measures. On the natural benchmarks its fingerprint weight on human
+simplicity is 0.59 and 0.57 under j1, and 0.31–0.56 under the other prompts. With explain it also picks up meaning (β<sub>M</sub> 0.23 and
+0.20, against 0.03 and 0.04 under j1), and gpt-oss's bare score rewards losing meaning (β<sub>M</sub> −0.28). The meaning score's fingerprint
+stays where it was (β<sub>M</sub> 0.67–0.80 under every prompt). On the contrast pilot, against the design, j1's simplicity score follows
+designed simplicity with almost no meaning in it (β<sub>S</sub> 0.77 and 0.67, β<sub>M</sub> 0.07 and 0.04); bare weakens it (0.56 and
+0.51), and the reader framing makes Qwen's meaning score partly a simplicity score (β<sub>S</sub> 0.26).</p>
+<p>The length bias of §6.3 is not a product of j1's wording. On the contrast pilot, controlling for the design, every prompt treats shorter as
+simpler, for both judges (partial r −0.47 to −0.74). On the natural benchmarks the bare prompt, which lacks j1's note that simplicity "is not
+about length", makes the bias much stronger (Qwen: −0.25 to −0.78, meeting the pre-registered bias criterion on eight of the nine benchmarks); whether the note itself
+is what helps would need a prompt that differs from j1 by the note alone.</p>
+<p class="finding">A judge's meaning score is a property of the model; its simplicity score is a property of the model and its prompt. The
+simplicity results of §6.1 belong to one carefully worded prompt, the best of the five we tried, and should be read as a best case. A report
+of LLM-judge simplicity should give the prompt and the definition of simplicity it uses, and preferably results under more than one
+prompt.</p>
+<p><b>Caveats.</b> The ablation is exploratory. With 60 items per natural benchmark the intervals are wide, and the 40 comparisons per judge
+and dimension are not corrected for multiplicity. Two prompts change more than the wording: bare drops the definition, and reader asks about
+the rewrite's own simplicity rather than its gain over the original. The conclusions above hold with bare left out, but a paraphrase of j1
+with the same content would separate wording from definition.</p>
+
 <div class="callout plan"><div class="kicker">Planned</div>
 <ul>
   <li>Both judges on the full contrast set after annotation; H7 final at G4 (19 Dec).</li>
@@ -426,12 +501,13 @@ LLM judges; they are simply not free of it.</p>
 the metric. Report the benchmark's ρ next to any correlation, report fingerprints rather than raw correlations, and choose metrics by
 fingerprint: their rankings agree across benchmarks (§3). For meaning, open LLM judges are now the strongest automatic measures we tested,
 and a 27B judge is at least as good as a 120B one; for simplicity, no single measure wins everywhere, and a judge's length bias should be
-checked before it is trusted. When judges are compared, they should be scored the same way (§6.2).</p>
+checked before it is trusted. When judges are compared, they should be scored the same way (§6.2). A judge's simplicity score depends on
+its prompt (§6.4), so the prompt and its definition of simplicity belong in the report.</p>
 <p><b>What the contrast set adds.</b> On natural data, a metric's meaning signal and its copying of the source come together. When meaning,
 simplicity and length are crossed by design, most metrics that looked like meaning metrics are not, and the metrics that look like simplicity
 metrics mostly are. The contrast set is the evidence natural benchmarks cannot provide.</p>
 <p><b>Limitations.</b> English only. Nine benchmarks of very uneven size. Length measured as compression ratio. The contrast-set results here
-come from one annotator. The judges are open models from two families; closed models may behave differently. The fingerprint is linear and
+come from one annotator. The judges are open models from two families; closed models may behave differently, and their simplicity results depend on the prompt (§6.4). The fingerprint is linear and
 item-level; system-level conclusions may differ.</p>
 
 <h2 id="acl"><span class="num">8</span>Road to ACL: proposals</h2>
@@ -452,8 +528,13 @@ item-level; system-level conclusions may differ.</p>
   0.7) and average, so its score is graded like a direct judge's, and report both judges with both scoring rules. It removes the
   resolution confound from the judge comparison (§6.2) before a reviewer finds it. <i>Cost: about 5× the gpt-oss calls on the contrast
   pilot and one natural benchmark, ~1 GPU-day on the shared machine.</i></li>
-  <li><b>A length-controlled judge.</b> Re-run the judges on the contrast pilot with one added instruction ("length alone is not simplicity") and
-  report how its fingerprint and partial r change. That turns the bias finding into a usable recommendation. <i>Cost: about 3 GPU-hours.</i></li>
+  <li><b>Prompt robustness as a confirmed result</b> (started: §6.4). Run items 61–300 of each benchmark (new items: the sampling order is
+  fixed) with predictions written down before the run, and add two controlled prompts: j1 reworded with the same content, and j1 without its
+  length note. The first separates wording from definition, which answers the obvious objection to the bare prompt; the second shows what
+  the length note does. <i>Cost: about 18 h (Qwen) and 16 h (gpt-oss) of judge time on the shared machine, two to three days.</i></li>
+  <li><b>A length-controlled judge.</b> j1 already says that simplicity "is not about length", and the bias is there anyway (§6.3), and
+  stronger without that note (§6.4). The j1-without-the-note prompt above measures what the note does; a stronger instruction, with its
+  fingerprint and partial r, would turn the bias finding into a usable recommendation. <i>Cost: about 3 GPU-hours on the contrast pilot.</i></li>
   <li><b>Make the length test comparative</b> (started: Figure 14, top row). Given the design, FKGL and SIMPLE lean on length almost as much
   as the judges, and all of them more than the annotator. Report the length test for every simplicity measure on the full set;
   "every automatic simplicity measure takes the length shortcut, humans less so" is a stronger and more general finding than a judge-only
